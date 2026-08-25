@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="160dp"
+    android:layout_height="195dp"
+    android:layout_margin="10dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:foreground="@drawable/selector_item_virtual_app"
+    android:stateListAnimator="@animator/scaler"
+    app:cardBackgroundColor="#1E293B"
+    app:strokeColor="#334155"
+    app:strokeWidth="1dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="2dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Contenedor del Icono con Insignia Tor -->
+        <FrameLayout
+            android:layout_width="76dp"
+            android:layout_height="76dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_splash_icon_card"
+                android:padding="10dp">
+
+                <ImageView
+                    android:id="@+id/ivAppIcon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:src="@mipmap/ic_launcher"
+                    tools:ignore="ContentDescription" />
+            </FrameLayout>
+
+            <!-- Insignia Tor (Visible si la app tiene Tor habilitado) -->
+            <LinearLayout
+                android:id="@+id/layoutTorBadge"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="top|end"
+                android:background="@drawable/bg_tor_badge"
+                android:gravity="center"
+                android:elevation="6dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivTorBadgeIcon"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_tor_onion"
+                    android:contentDescription="Tor Routing Active" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Nombre de la aplicación -->
+        <TextView
+            android:id="@+id/tvAppName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:text="App Name"
+            android:textColor="#F8FAFC"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

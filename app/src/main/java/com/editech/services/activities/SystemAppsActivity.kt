@@ -1,0 +1,196 @@
+package com.editech.services.activities
+
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.view.View
+import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.GridLayoutManager
+import com.editech.services.adapters.SystemAppsAdapter
+import com.editech.services.databinding.ActivitySystemAppsBinding
+import com.editech.services.models.SystemApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.editech.services.R
+
+/**
+ * Actividad que muestra las apps instaladas en el sistema
+ * para virtualizarlas dentro de BlackBox (estilo Parallel Space)
+ */
+class SystemAppsActivity : AppCompatActivity() {
+    
+    private lateinit var binding: ActivitySystemAppsBinding
+    private lateinit var adapter: SystemAppsAdapter
+    
+    companion object {
+        const val EXTRA_SELECTED_APP_PACKAGE = "selected_app_package"
+        const val EXTRA_SELECTED_APP_NAME = "selected_app_name"
+        const val EXTRA_SELECTED_APP_PATH = "selected_app_path"
+    }
+    
+    private val allSystemApps = mutableListOf<SystemApp>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivitySystemAppsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        
+        setupRecyclerView()
+        setupButtons()
+        setupSearch()
+        loadSystemApps()
+        
+        loadBannerAd()
+    }
+
+    private fun loadBannerAd() {
+        CoroutineScope(Dispatchers.IO).launch {
+             // Wait for SDK to initialize (poll for up to 20 seconds)
+            var attempts = 0
+            while (!com.editech.services.utils.AdManager.isSdkInitialized() && attempts < 20) {
+                kotlinx.coroutines.delay(1000)
+                attempts++
+            }
+            // Wait an extra second for safety
+            kotlinx.coroutines.delay(1000)
+            
+            withContext(Dispatchers.Main) {
+               val bannerContainer = findViewById<android.widget.RelativeLayout>(R.id.bannerContainer)
+               if (bannerContainer != null) {
+                   com.editech.services.utils.AdManager.loadBanner(this@SystemAppsActivity, bannerContainer)
+               }
+            }
+        }
+    }
+    
+    private fun setupRecyclerView() {
+        adapter = SystemAppsAdapter { systemApp ->
+            onSystemAppSelected(systemApp)
+        }
+        
+        binding.rvSystemApps.apply {
+            val spanCount = resources.getInteger(R.integer.grid_span_count)
+            layoutManager = GridLayoutManager(this@SystemAppsActivity, spanCount)
+            adapter = this@SystemAppsActivity.adapter
+        }
+    }
+    
+    private fun setupButtons() {
+        binding.btnBackSystemApps.setOnClickListener {
+            finish()
+        }
+        binding.btnCancel.setOnClickListener {
+            finish()
+        }
+    }
+
+    private fun setupSearch() {
+        binding.etSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterApps(s.toString())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+    }
+
+    private fun filterApps(query: String) {
+        val filteredList = if (query.isEmpty()) {
+            allSystemApps
+        } else {
+            allSystemApps.filter { it.name.contains(query, ignoreCase = true) }
+        }
+
+        adapter.submitList(filteredList)
+
+        if (filteredList.isEmpty()) {
+            binding.layoutEmptyState.visibility = View.VISIBLE
+            binding.rvSystemApps.visibility = View.GONE
+            binding.tvStatus.text = getString(R.string.status_no_results)
+        } else {
+            binding.layoutEmptyState.visibility = View.GONE
+            binding.rvSystemApps.visibility = View.VISIBLE
+            binding.tvStatus.text = getString(R.string.status_apps_found, filteredList.size)
+        }
+    }
+    
+    /**
+     * Carga todas las apps instaladas en el sistema (usuario, no sistema base)
+     */
+    private fun loadSystemApps() {
+        binding.progressBar.visibility = View.VISIBLE
+        binding.tvStatus.text = getString(R.string.status_searching_installed_apps)
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val pm = packageManager
+                val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                val systemApps = mutableListOf<SystemApp>()
+                
+                installedApps.forEach { appInfo ->
+                    // Mostrar apps de usuario o apps del sistema actualizadas
+                    if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0 ||
+                        (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) {
+                        
+                        try {
+                            val icon = appInfo.loadIcon(pm)
+                            val name = appInfo.loadLabel(pm).toString()
+                            val packageName = appInfo.packageName
+                            val apkPath = appInfo.sourceDir // Path al APK instalado
+                            
+                            systemApps.add(
+                                SystemApp(
+                                    packageName = packageName,
+                                    name = name,
+                                    icon = icon,
+                                    apkPath = apkPath
+                                )
+                            )
+                        } catch (e: Exception) {
+                            // Ignorar apps que no se puedan cargar
+                        }
+                    }
+                }
+                
+                // Ordenar alfabéticamente
+                systemApps.sortBy { it.name }
+                
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    
+                    allSystemApps.clear()
+                    allSystemApps.addAll(systemApps)
+                    
+                    filterApps(binding.etSearch.text.toString())
+                    
+                    // Auto-focus en el primer item (si no hay busqueda)
+                    if (allSystemApps.isNotEmpty()) {
+                         binding.rvSystemApps.requestFocus()
+                    }
+                }
+                
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    binding.tvStatus.text = getString(R.string.status_error, e.message)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Callback cuando el usuario selecciona una app para virtualizar
+     */
+    private fun onSystemAppSelected(systemApp: SystemApp) {
+        val resultIntent = Intent().apply {
+            putExtra(EXTRA_SELECTED_APP_PACKAGE, systemApp.packageName)
+            putExtra(EXTRA_SELECTED_APP_NAME, systemApp.name)
+            putExtra(EXTRA_SELECTED_APP_PATH, systemApp.apkPath)
+        }
+        setResult(RESULT_OK, resultIntent)
+        finish()
+    }
+}
