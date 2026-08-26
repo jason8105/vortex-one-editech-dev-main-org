@@ -21,7 +21,7 @@ android {
         
         // Configuración de ABIs nativas para BlackBox
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -40,15 +40,6 @@ android {
         }
     }
 
-    // Splits para optimizar tamaño de APK por arquitectura
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
-        }
-    }
 
     buildTypes {
         release {

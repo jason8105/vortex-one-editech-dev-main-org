@@ -397,9 +397,20 @@ public class BActivityThread extends IBActivityThread.Stub {
                 StrictModeCompat.disableDeathOnFileUriExposure();
             }
         }
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WebView.setDataDirectorySuffix(getUserId() + ":" + packageName + ":" + processName);
+            try {
+                // Colons in process names cause filesystem errors for WebView in Android 9+
+                String safeSuffix = getUserId() + "_" + packageName.replace(":", "_") + "_" + processName.replace(":", "_");
+                android.webkit.WebView.setDataDirectorySuffix(safeSuffix);
+            } catch (IllegalStateException e) {
+                top.niunaijun.blackbox.utils.Slog.w(TAG, "WebView suffix already set");
+            } catch (Exception e) {
+                top.niunaijun.blackbox.utils.Slog.w(TAG, "Failed to set WebView suffix: " + e.getMessage());
+            }
         }
+
+
 
         VirtualRuntime.setupRuntime(processName, applicationInfo);
 
