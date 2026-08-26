@@ -63,16 +63,22 @@ public class GmsProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             try {
                 if (args != null && args.length > 0) {
+                    String currentCallingPkg = top.niunaijun.blackbox.app.BActivityThread.getAppProcessName();
+                    if (currentCallingPkg == null || currentCallingPkg.isEmpty()) {
+                        currentCallingPkg = BlackBoxCore.getHostPkg();
+                    }
+
                     for (int i = 0; i < args.length; i++) {
                         Object arg = args[i];
                         if (arg instanceof String) {
                             String str = (String) arg;
-                            if (str != null && !str.equals(BlackBoxCore.getHostPkg()) && (str.contains(".") || "com.google.android.gms".equals(str))) {
-                                args[i] = BlackBoxCore.getHostPkg();
-                                Slog.d(TAG, "GmsProxy: Fixed calling package string argument to " + BlackBoxCore.getHostPkg());
+                            // Allow valid virtual client package names through instead of overriding everything to host package
+                            if (str != null && (str.equals("com.google.android.gms") || str.equals("com.android.vending"))) {
+                                args[i] = currentCallingPkg;
+                                Slog.d(TAG, "GmsProxy: Mapped system service package to " + currentCallingPkg);
                             }
                         } else if (arg != null) {
-                            // Check for GetServiceRequest object and rewrite callingPackage fields
+                            // Check for GetServiceRequest object and rewrite callingPackage fields safely
                             try {
                                 java.lang.reflect.Field[] fields = arg.getClass().getDeclaredFields();
                                 for (java.lang.reflect.Field f : fields) {
@@ -81,9 +87,10 @@ public class GmsProxy extends BinderInvocationStub {
                                         if (name.contains("package") || name.contains("calling") || name.contains("client")) {
                                             f.setAccessible(true);
                                             Object val = f.get(arg);
-                                            if (val instanceof String && !BlackBoxCore.getHostPkg().equals(val)) {
-                                                f.set(arg, BlackBoxCore.getHostPkg());
-                                                Slog.d(TAG, "GmsProxy: Rewrote GetServiceRequest field " + f.getName() + " to " + BlackBoxCore.getHostPkg());
+                                            if (val instanceof String) {
+                                                // Retain actual package if it belongs to the sandbox client, otherwise map safely
+                                                f.set(arg, currentCallingPkg);
+                                                Slog.d(TAG, "GmsProxy: Safely mapped GetServiceRequest field " + f.getName() + " to " + currentCallingPkg);
                                             }
                                         }
                                     }
@@ -99,6 +106,7 @@ public class GmsProxy extends BinderInvocationStub {
             }
         }
     }
+
 
     // Hook getServiceBroker to handle service broker issues
     @ProxyMethod("getServiceBroker")
