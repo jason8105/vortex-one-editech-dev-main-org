@@ -279,8 +279,13 @@ class MainActivity : AppCompatActivity() {
                 val apps = mutableListOf<VirtualApp>()
                 
                 installedApps?.forEach { appInfo ->
-                    // Ocultar servicios y paquetes de infraestructura de Google del launcher principal
-                    if (top.niunaijun.blackbox.core.GmsCore.isGoogleAppOrService(appInfo.packageName)) {
+                    val pkgName = appInfo.packageName ?: return@forEach
+
+                    // Ocultar servicios de infraestructura de Google, pero permitir 
+                    // la Play Store y Play Games en el dashboard principal
+                    if (top.niunaijun.blackbox.core.GmsCore.isGoogleAppOrService(pkgName) &&
+                        pkgName != "com.android.vending" &&
+                        pkgName != "com.google.android.play.games") {
                         return@forEach
                     }
 
@@ -291,10 +296,10 @@ class MainActivity : AppCompatActivity() {
                         null
                     }
                     
-                    val isTor = com.editech.services.tor.TorManager.isTorEnabled(appInfo.packageName)
+                    val isTor = com.editech.services.tor.TorManager.isTorEnabled(pkgName)
                     apps.add(
                         VirtualApp(
-                            packageName = appInfo.packageName,
+                            packageName = pkgName,
                             name = appInfo.loadLabel(packageManager).toString(),
                             icon = icon,
                             userId = USER_ID,
@@ -323,6 +328,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
 
     private fun setupSearch() {
         binding.etSearch.addTextChangedListener(object : android.text.TextWatcher {

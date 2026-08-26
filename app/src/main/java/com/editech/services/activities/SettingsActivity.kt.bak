@@ -201,7 +201,7 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-        private fun loadVirtualApps() {
+    private fun loadVirtualApps() {
         binding.progressBar.visibility = View.VISIBLE
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -210,13 +210,8 @@ class SettingsActivity : AppCompatActivity() {
                 val apps = mutableListOf<VirtualApp>()
 
                 installedApps?.forEach { appInfo ->
-                    val pkgName = appInfo.packageName ?: return@forEach
-
-                    // Ocultar paquetes de infraestructura de Google, pero permitir 
-                    // la Play Store y Play Games para que aparezcan en los listados
-                    if (top.niunaijun.blackbox.core.GmsCore.isGoogleAppOrService(pkgName) &&
-                        pkgName != "com.android.vending" &&
-                        pkgName != "com.google.android.play.games") {
+                    // Ocultar paquetes de infraestructura de Google (gestionados en su tarjeta dedicada)
+                    if (top.niunaijun.blackbox.core.GmsCore.isGoogleAppOrService(appInfo.packageName)) {
                         return@forEach
                     }
 
@@ -229,7 +224,7 @@ class SettingsActivity : AppCompatActivity() {
 
                     apps.add(
                         VirtualApp(
-                            packageName = pkgName,
+                            packageName = appInfo.packageName,
                             name = appInfo.loadLabel(pm).toString(),
                             icon = icon,
                             userId = USER_ID
@@ -263,7 +258,6 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
     }
-
 
     private fun handleClearCache(app: VirtualApp) {
         binding.progressBar.visibility = View.VISIBLE
