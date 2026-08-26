@@ -126,26 +126,54 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-    @ProxyMethod("getPackageInfo")
+       @ProxyMethod("getPackageInfo")
     public static class GetPackageInfo extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             
-            // Provide fake Google Play Services info for MIUI apps
-            if ("com.android.vending".equals(packageName)) {
-                return createFakeGooglePlayServicesPackageInfo();
+            // Handle fake Google Play Store / Services info
+            if ("com.android.vending".equals(packageName) || "com.google.android.gms".equals(packageName)) {
+                PackageInfo packageInfo = null;
+                if ("com.android.vending".equals(packageName)) {
+                    packageInfo = createFakeGooglePlayServicesPackageInfo();
+                } else {
+                    packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
+                }
+
+                if (packageInfo != null) {
+                    // Inject valid host signatures so GoogleSignatureVerifier passes the cryptographic check
+                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+                        try {
+                            PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
+                                    .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
+                            packageInfo.signatures = realInfo.signatures;
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                packageInfo.signingInfo = realInfo.signingInfo;
+                            }
+                        } catch (Exception e) {
+                            Slog.e(TAG, "Signature spoofing failed", e);
+                        }
+                    }
+
+                    // Apply high version spoofing
+                    packageInfo.versionCode = 2100000000;
+                    packageInfo.versionName = "99.99.99";
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        packageInfo.setLongVersionCode(2100000000L);
+                    }
+                    return packageInfo;
+                }
             }
             
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {
-                // Signature Spoofing for MicroG: Feed the host's real signature to the sandbox
-                if ("com.google.android.gms".equals(packageName) || "com.android.vending".equals(packageName) || "com.google.android.gsf".equals(packageName)) {
+                if ("com.google.android.gms".equals(packageName) || "com.android.gsf".equals(packageName)) {
                     if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
                         try {
                             PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
-                                    .getPackageInfo("com.android.vending", PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
+                                    .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
                             packageInfo.signatures = realInfo.signatures;
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 packageInfo.signingInfo = realInfo.signingInfo;
@@ -155,8 +183,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                         }
                     }
                 }
-
-                // Patch: Mark RECORD_AUDIO and related permissions as granted
 
                 if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
                     for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
@@ -172,12 +198,9 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                     }
                 }
 
-                // SPOOF: Set a high version to trick providers/servers
-                // We avoid modifying com.android.vending as it is handled separately above
-                // 2100000000 is a safe high int (Max is ~2.147B)
                 packageInfo.versionCode = 2100000000;
                 packageInfo.versionName = "99.99.99";
-                if (Build.VERSION.SDK_INT >= 28) { // Android P is 28
+                if (Build.VERSION.SDK_INT >= 28) {
                     packageInfo.setLongVersionCode(2100000000L);
                 }
 
@@ -199,13 +222,14 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             appInfo.packageName = "com.android.vending";
             appInfo.name = "Google Play Store";
             appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
-            appInfo.uid = 10001; // System app UID
+            appInfo.uid = 10001; 
             packageInfo.applicationInfo = appInfo;
             
             Slog.d(TAG, "GetPackageInfo: Providing fake Google Play Services info");
             return packageInfo;
         }
     }
+
 
     @ProxyMethod("getPackageUid")
     public static class GetPackageUid extends MethodHook {
