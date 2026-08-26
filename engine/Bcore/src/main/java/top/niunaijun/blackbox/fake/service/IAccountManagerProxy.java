@@ -66,16 +66,12 @@ public class IAccountManagerProxy extends BinderInvocationStub {
         }
     }
 
-    @ProxyMethod("getAccounts")
+        @ProxyMethod("getAccounts")
     public static class getAccounts extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            Account[] accounts = (Account[]) method.invoke(who, args);
-            if (accounts == null || accounts.length == 0) {
-                Slog.d(TAG, "Returning mock Google account for authentication");
-                return new Account[]{new Account("mock@gmail.com", "com.google")};
-            }
-            return accounts;
+            // Allow MicroG to return real accounts
+            return method.invoke(who, args);
         }
     }
 
@@ -83,14 +79,11 @@ public class IAccountManagerProxy extends BinderInvocationStub {
     public static class getAccountsByType extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String type = (String) args[0];
-            if ("com.google".equals(type)) {
-                Slog.d(TAG, "Returning mock Google accounts for type: " + type);
-                return new Account[]{new Account("mock@gmail.com", "com.google")};
-            }
+            // Allow MicroG to return real accounts
             return method.invoke(who, args);
         }
     }
+
 
     @ProxyMethod("getUserData")
     public static class getUserData extends MethodHook {
@@ -207,17 +200,14 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
     @ProxyMethod("peekAuthToken")
     public static class peekAuthToken extends MethodHook {
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             Account account = (Account) args[0];
-            if (account != null && "com.google".equals(account.type)) {
-                Slog.d(TAG, "Returning mock auth token for Google account");
-                return top.niunaijun.blackbox.core.GmsCore.FALLBACK_AUTH_TOKEN;
-            }
+            // Allow MicroG to process real auth tokens
             return BAccountManager.get().peekAuthToken(account, (String) args[1]);
         }
     }
+
 
     @ProxyMethod("setAuthToken")
     public static class setAuthToken extends MethodHook {

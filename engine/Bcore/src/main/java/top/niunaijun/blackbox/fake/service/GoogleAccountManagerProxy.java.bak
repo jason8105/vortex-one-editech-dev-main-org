@@ -54,8 +54,27 @@ public class GoogleAccountManagerProxy extends ClassInvocationStub {
     public static class GetAccounts extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // Allow real accounts from MicroG to pass through
-            return method.invoke(who, args);
+            try {
+                Slog.d(TAG, "GoogleAccountManager: Handling getAccounts call");
+                
+                // Try to get real accounts first
+                Object result = method.invoke(who, args);
+                if (result != null && result instanceof Account[]) {
+                    Account[] accounts = (Account[]) result;
+                    if (accounts.length > 0) {
+                        Slog.d(TAG, "GoogleAccountManager: Found " + accounts.length + " real accounts");
+                        return result;
+                    }
+                }
+                
+                // Return mock Google account if no real accounts found
+                Slog.d(TAG, "GoogleAccountManager: No real accounts found, returning mock account");
+                return createMockGoogleAccounts();
+                
+            } catch (Exception e) {
+                Slog.w(TAG, "GoogleAccountManager: GetAccounts error, returning mock accounts", e);
+                return createMockGoogleAccounts();
+            }
         }
     }
 
@@ -63,8 +82,27 @@ public class GoogleAccountManagerProxy extends ClassInvocationStub {
     public static class GetAccountsByType extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // Allow real accounts from MicroG to pass through
-            return method.invoke(who, args);
+            try {
+                Slog.d(TAG, "GoogleAccountManager: Handling getAccountsByType call");
+                
+                if (args != null && args.length > 0) {
+                    String accountType = (String) args[0];
+                    Slog.d(TAG, "GoogleAccountManager: Requesting accounts of type: " + accountType);
+                    
+                    // For Google accounts, return mock accounts
+                    if ("com.google".equals(accountType)) {
+                        Slog.d(TAG, "GoogleAccountManager: Returning mock Google accounts");
+                        return createMockGoogleAccounts();
+                    }
+                }
+                
+                // Try to get real accounts
+                return method.invoke(who, args);
+                
+            } catch (Exception e) {
+                Slog.w(TAG, "GoogleAccountManager: GetAccountsByType error, returning mock accounts", e);
+                return createMockGoogleAccounts();
+            }
         }
     }
 

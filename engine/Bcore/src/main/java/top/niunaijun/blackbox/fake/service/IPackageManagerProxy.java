@@ -140,7 +140,24 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {
+                // Signature Spoofing for MicroG: Feed the host's real signature to the sandbox
+                if ("com.google.android.gms".equals(packageName) || "com.android.vending".equals(packageName) || "com.google.android.gsf".equals(packageName)) {
+                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+                        try {
+                            PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
+                                    .getPackageInfo("com.android.vending", PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
+                            packageInfo.signatures = realInfo.signatures;
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                packageInfo.signingInfo = realInfo.signingInfo;
+                            }
+                        } catch (Exception e) {
+                            Slog.e(TAG, "Signature spoofing failed", e);
+                        }
+                    }
+                }
+
                 // Patch: Mark RECORD_AUDIO and related permissions as granted
+
                 if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
                     for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
                         String perm = packageInfo.requestedPermissions[i];

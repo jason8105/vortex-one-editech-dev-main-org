@@ -84,17 +84,34 @@ public class GmsCore {
     }
 
     public static InstallResult installGApps(int userId) {
-        Set<String> googleApps = new HashSet<>();
-
-        googleApps.addAll(GOOGLE_SERVICE);
-        googleApps.addAll(GOOGLE_APP);
-
-        InstallResult installResult = installPackages(googleApps, userId);
-        if (!installResult.success) {
-            Log.w(TAG, "Failed to install some Google packages, continuing with fallback auth.");
-            return new InstallResult(); // Return empty success result to proceed with fallback auth
+        // Option 1: Install MicroG and FakeStore directly from Assets instead of cloning host
+        InstallResult gmsResult = installMicroGFromAsset("microg.apk", GMS_PKG, userId);
+        InstallResult vendingResult = installMicroGFromAsset("vending.apk", VENDING_PKG, userId);
+        
+        if (!gmsResult.success || !vendingResult.success) {
+            Log.w(TAG, "Failed to install MicroG packages from assets.");
+            return new InstallResult().installError("MicroG Installation Failed");
         }
-        return installResult;
+        return gmsResult;
+    }
+
+    private static InstallResult installMicroGFromAsset(String assetName, String packageName, int userId) {
+        BlackBoxCore core = BlackBoxCore.get();
+        if (core.isInstalled(packageName, userId)) {
+            return new InstallResult().installSuccess(packageName);
+        }
+        try {
+            java.io.File destFile = new java.io.File(top.niunaijun.blackbox.core.env.BEnvironment.getCacheDir(), assetName);
+            if (!destFile.exists()) {
+                java.io.InputStream is = BlackBoxCore.getContext().getAssets().open(assetName);
+                top.niunaijun.blackbox.utils.FileUtils.copyFile(is, destFile);
+            }
+            top.niunaijun.blackbox.entity.pm.InstallOption option = top.niunaijun.blackbox.entity.pm.InstallOption.installBySystem();
+            return core.installPackageAsUser(destFile.getAbsolutePath(), option, userId);
+        } catch (Exception e) {
+            Log.e(TAG, "Asset extraction failed for " + assetName, e);
+            return new InstallResult().installError(e.getMessage());
+        }
     }
 
 

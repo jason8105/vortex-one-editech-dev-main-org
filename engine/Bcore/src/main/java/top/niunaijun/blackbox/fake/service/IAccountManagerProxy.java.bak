@@ -70,12 +70,8 @@ public class IAccountManagerProxy extends BinderInvocationStub {
     public static class getAccounts extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            Account[] accounts = (Account[]) method.invoke(who, args);
-            if (accounts == null || accounts.length == 0) {
-                Slog.d(TAG, "Returning mock Google account for authentication");
-                return new Account[]{new Account("mock@gmail.com", "com.google")};
-            }
-            return accounts;
+            // Option 2: Return REAL accounts from MicroG for Play Games Support
+            return method.invoke(who, args);
         }
     }
 
@@ -83,11 +79,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
     public static class getAccountsByType extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String type = (String) args[0];
-            if ("com.google".equals(type)) {
-                Slog.d(TAG, "Returning mock Google accounts for type: " + type);
-                return new Account[]{new Account("mock@gmail.com", "com.google")};
-            }
+            // Option 2: Return REAL accounts from MicroG for Play Games Support
             return method.invoke(who, args);
         }
     }
@@ -207,12 +199,14 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
     @ProxyMethod("peekAuthToken")
     public static class peekAuthToken extends MethodHook {
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return BAccountManager.get().peekAuthToken((Account) args[0], (String) args[1]);
+            Account account = (Account) args[0];
+            // Allow MicroG to process real auth tokens
+            return BAccountManager.get().peekAuthToken(account, (String) args[1]);
         }
     }
+
 
     @ProxyMethod("setAuthToken")
     public static class setAuthToken extends MethodHook {

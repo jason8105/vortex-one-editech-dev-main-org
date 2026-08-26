@@ -140,6 +140,23 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {
+                // Option 1: SIGNATURE SPOOFING FOR MICROG
+                // Steal the real Google signature from the host device to trick games
+                if ("com.google.android.gms".equals(packageName) || "com.android.vending".equals(packageName)) {
+                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+                        try {
+                            PackageInfo realGmsInfo = BlackBoxCore.getContext().getPackageManager()
+                                    .getPackageInfo("com.google.android.gms", flags);
+                            packageInfo.signatures = realGmsInfo.signatures;
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                packageInfo.signingInfo = realGmsInfo.signingInfo;
+                            }
+                        } catch (Exception e) {
+                            Slog.e(TAG, "Signature spoofing failed. Host may lack GMS.", e);
+                        }
+                    }
+                }
+
                 // Patch: Mark RECORD_AUDIO and related permissions as granted
                 if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
                     for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
@@ -598,6 +615,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             permission.equals("android.permission.SEND_SAFETY_CENTER_UPDATE")) {
             return true;
         }
+
         
         // Xiaomi-specific permissions
         if (permission.equals("miui.permission.USE_INTERNAL_GENERAL_API") ||
