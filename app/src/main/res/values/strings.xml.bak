@@ -13,13 +13,13 @@
     <string name="dialog_uninstall_message">Do you want to uninstall %s?</string>
     <string name="action_uninstall">Uninstall</string>
     <string name="dialog_virtualize_error_title">Virtualization Error</string>
-    <string name="dialog_virtualize_error_message" formatted="false">Virtualization of %s failed: %s</string>
+    <string name="dialog_virtualize_error_message">Virtualization of %s failed: %s</string>
     <string name="toast_installing_apk">Installing %s…</string>
     <string name="toast_preparing_install">Preparing installation…</string>
     <string name="toast_install_success">✓ %s installed successfully</string>
     <string name="toast_error_generic">✗ Error: %s</string>
     <string name="toast_load_apps_error">Error loading apps: %s</string>
-    <string name="toast_launch_error" formatted="false">Error launching %s: %s</string>
+    <string name="toast_launch_error">Error launching %s: %s</string>
     <string name="toast_uninstall_success">✓ %s uninstalled</string>
     <string name="toast_uninstall_error">Error uninstalling: %s</string>
     <string name="toast_virtualizing_app">Virtualizing %s…</string>
@@ -108,9 +108,9 @@
     <string name="action_clear_data">Clear Data</string>
     <string name="dialog_clear_data_title">Reset %s?</string>
     <string name="dialog_clear_data_msg">All app data, login sessions, and databases for %s will be permanently deleted. The app will be reset to its initial state.\n\nDo you want to proceed?</string>
-    <string name="toast_cache_cleared" formatted="false">✓ Cleared %s of cache for %s</string>
+    <string name="toast_cache_cleared">✓ Cleared %s of cache for %s</string>
     <string name="toast_data_cleared">✓ Data for %s has been reset</string>
-    <string name="toast_all_cache_cleared" formatted="false">✓ Cleared %s of cache across %d apps</string>
+    <string name="toast_all_cache_cleared">✓ Cleared %s of cache across %d apps</string>
     <string name="toast_clear_error">Error clearing storage: %s</string>
     <string name="app_version_credit">Version %1$s • Made with ❤️ by editech-dev for the Android community</string>
     <string name="action_install">Install</string>

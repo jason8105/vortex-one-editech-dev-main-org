@@ -13,13 +13,13 @@
     <string name="dialog_uninstall_message">¿Deseas desinstalar %s?</string>
     <string name="action_uninstall">Desinstalar</string>
     <string name="dialog_virtualize_error_title">Error de Virtualización</string>
-    <string name="dialog_virtualize_error_message" formatted="false">Falló la virtualización de %s: %s</string>
+    <string name="dialog_virtualize_error_message">Falló la virtualización de %s: %s</string>
     <string name="toast_installing_apk">Instalando %s…</string>
     <string name="toast_preparing_install">Preparando instalación…</string>
     <string name="toast_install_success">✓ %s instalado correctamente</string>
     <string name="toast_error_generic">✗ Error: %s</string>
     <string name="toast_load_apps_error">Error al cargar apps: %s</string>
-    <string name="toast_launch_error" formatted="false">Error al lanzar %s: %s</string>
+    <string name="toast_launch_error">Error al lanzar %s: %s</string>
     <string name="toast_uninstall_success">✓ %s desinstalado</string>
     <string name="toast_uninstall_error">Error al desinstalar: %s</string>
     <string name="toast_virtualizing_app">Virtualizando %s…</string>
@@ -108,9 +108,9 @@
     <string name="action_clear_data">Borrar Datos</string>
     <string name="dialog_clear_data_title">¿Reiniciar %s?</string>
     <string name="dialog_clear_data_msg">Se eliminarán permanentemente todas las sesiones, cuentas y datos almacenados de %s. La aplicación quedará limpia como recién instalada.\n\n¿Deseas continuar?</string>
-    <string name="toast_cache_cleared" formatted="false">✓ Se liberaron %s de caché de %s</string>
+    <string name="toast_cache_cleared">✓ Se liberaron %s de caché de %s</string>
     <string name="toast_data_cleared">✓ Datos de %s reiniciados correctamente</string>
-    <string name="toast_all_cache_cleared" formatted="false">✓ Se liberaron %s de caché en %d apps</string>
+    <string name="toast_all_cache_cleared">✓ Se liberaron %s de caché en %d apps</string>
     <string name="toast_clear_error">Error al limpiar almacenamiento: %s</string>
     <string name="app_version_credit">Versión %1$s • Hecho con ❤️ por editech-dev para la comunidad Android</string>
     <string name="action_install">Instalar</string>
