@@ -288,12 +288,6 @@ public class OsStub extends ClassInvocationStub {
             if (args != null && args.length >= 1 && args[0] instanceof String) {
                 String node = (String) args[0];
                 if (node != null && !node.isEmpty() && !isIpAddress(node)) {
-                    // Handle GMS/Google domain lookups cleanly using loopback fallback to avoid crashes
-                    if (node.contains("googleapis") || node.contains("google.com") || node.contains("gms")) {
-                        try {
-                            return new java.net.InetAddress[]{ java.net.InetAddress.getByName("127.0.0.1") };
-                        } catch (Throwable ignored) {}
-                    }
                     String pkg = resolveCurrentPackage();
                     if (pkg != null && isTorEnabledForPackage(pkg)) {
                         String virtualIp = getOrAllocateVirtualIp(node);
@@ -325,12 +319,6 @@ public class OsStub extends ClassInvocationStub {
             if (args != null && args.length >= 1 && args[0] instanceof String) {
                 String node = (String) args[0];
                 if (node != null && !node.isEmpty() && !isIpAddress(node)) {
-                    // Handle GMS/Google domain lookups cleanly using loopback fallback to avoid crashes
-                    if (node.contains("googleapis") || node.contains("google.com") || node.contains("gms")) {
-                        try {
-                            return new java.net.InetAddress[]{ java.net.InetAddress.getByName("127.0.0.1") };
-                        } catch (Throwable ignored) {}
-                    }
                     String pkg = resolveCurrentPackage();
                     if (pkg != null && isTorEnabledForPackage(pkg)) {
                         String virtualIp = getOrAllocateVirtualIp(node);

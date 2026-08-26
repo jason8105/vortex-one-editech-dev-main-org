@@ -122,14 +122,10 @@ public class GmsProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             try {
                 Slog.d(TAG, "GmsProxy: Handling authenticate call");
-                Object result = method.invoke(who, args);
-                if (result == null) {
-                    return createMockAuthResult();
-                }
-                return result;
+                return method.invoke(who, args);
             } catch (Exception e) {
                 Slog.w(TAG, "GmsProxy: Authentication error, returning success", e);
-                // Return a mock successful authentication result with fallback token
+                // Return a mock successful authentication result
                 return createMockAuthResult();
             }
         }
@@ -198,16 +194,9 @@ public class GmsProxy extends BinderInvocationStub {
     // Helper method to create a mock authentication result
     private static Object createMockAuthResult() {
         try {
+            // Try to create a mock Bundle or similar object
             Class<?> bundleClass = Class.forName("android.os.Bundle");
-            Object bundle = bundleClass.newInstance();
-            // Inject fallback auth token if possible or return populated bundle
-            try {
-                java.lang.reflect.Method putStringMethod = bundleClass.getMethod("putString", String.class, String.class);
-                putStringMethod.invoke(bundle, "authToken", top.niunaijun.blackbox.core.GmsCore.FALLBACK_AUTH_TOKEN);
-                java.lang.reflect.Method putBoolMethod = bundleClass.getMethod("putBoolean", String.class, boolean.class);
-                putBoolMethod.invoke(bundle, "authenticated", true);
-            } catch (Exception ignored) {}
-            return bundle;
+            return bundleClass.newInstance();
         } catch (Exception e) {
             Slog.w(TAG, "Failed to create mock auth result", e);
             return null;

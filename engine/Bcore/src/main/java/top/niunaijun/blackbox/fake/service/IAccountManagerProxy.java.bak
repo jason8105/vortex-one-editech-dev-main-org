@@ -210,12 +210,7 @@ public class IAccountManagerProxy extends BinderInvocationStub {
 
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            Account account = (Account) args[0];
-            if (account != null && "com.google".equals(account.type)) {
-                Slog.d(TAG, "Returning mock auth token for Google account");
-                return top.niunaijun.blackbox.core.GmsCore.FALLBACK_AUTH_TOKEN;
-            }
-            return BAccountManager.get().peekAuthToken(account, (String) args[1]);
+            return BAccountManager.get().peekAuthToken((Account) args[0], (String) args[1]);
         }
     }
 

@@ -91,8 +91,8 @@ public class GmsCore {
 
         InstallResult installResult = installPackages(googleApps, userId);
         if (!installResult.success) {
-            Log.w(TAG, "Failed to install some Google packages, continuing with fallback auth: " + installResult.error);
-            return new InstallResult(); // Return empty success result to proceed with fallback auth
+            uninstallGApps(userId);
+            return installResult;
         }
         return installResult;
     }
