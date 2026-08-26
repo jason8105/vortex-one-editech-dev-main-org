@@ -598,7 +598,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             permission.equals("android.permission.SEND_SAFETY_CENTER_UPDATE")) {
             return true;
         }
-
         
         // Xiaomi-specific permissions
         if (permission.equals("miui.permission.USE_INTERNAL_GENERAL_API") ||
