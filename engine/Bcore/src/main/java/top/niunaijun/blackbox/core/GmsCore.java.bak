@@ -1,21 +1,20 @@
 package top.niunaijun.blackbox.core;
 
 import android.content.pm.PackageManager;
-
-import java.util.HashSet;
-import java.util.Set;
 import android.util.Log;
 
+import java.io.File;
+import java.io.InputStream;
+import java.util.HashSet;
+import java.util.Set;
+
 import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.core.env.BEnvironment;
 import top.niunaijun.blackbox.entity.pm.InstallResult;
+import top.niunaijun.blackbox.utils.FileUtils;
 
 /**
- * updated by alex5402 on 4/9/21.
- * * ∧＿∧
- * (`･ω･∥
- * 丶　つ０
- * しーＪ
- * 
+ * Modified for MicroG Asset Installation
  */
 public class GmsCore {
     private static final String TAG = "GmsCore";
@@ -56,26 +55,6 @@ public class GmsCore {
         return GOOGLE_APP.contains(str) || GOOGLE_SERVICE.contains(str);
     }
 
-    private static InstallResult installPackages(Set<String> list, int userId) {
-        BlackBoxCore blackBoxCore = BlackBoxCore.get();
-        for (String packageName : list) {
-            if (blackBoxCore.isInstalled(packageName, userId)) {
-                continue;
-            }
-            try {
-                BlackBoxCore.getContext().getPackageManager().getApplicationInfo(packageName, 0);
-            } catch (PackageManager.NameNotFoundException e) {
-                // Ignore
-                continue;
-            }
-            InstallResult installResult = blackBoxCore.installPackageAsUser(packageName, userId);
-            if (!installResult.success) {
-                return installResult;
-            }
-        }
-        return new InstallResult();
-    }
-
     private static void uninstallPackages(Set<String> list, int userId) {
         BlackBoxCore blackBoxCore = BlackBoxCore.get();
         for (String packageName : list) {
@@ -83,14 +62,17 @@ public class GmsCore {
         }
     }
 
+    // Option 1: Install MicroG and FakeStore directly from Assets instead of cloning host
     public static InstallResult installGApps(int userId) {
-        // Option 1: Install MicroG and FakeStore directly from Assets instead of cloning host
         InstallResult gmsResult = installMicroGFromAsset("microg.apk", GMS_PKG, userId);
         InstallResult vendingResult = installMicroGFromAsset("vending.apk", VENDING_PKG, userId);
         
         if (!gmsResult.success || !vendingResult.success) {
             Log.w(TAG, "Failed to install MicroG packages from assets.");
-            return new InstallResult().installError("MicroG Installation Failed");
+            InstallResult err = new InstallResult();
+            err.success = false;
+            err.msg = "MicroG Installation Failed";
+            return err;
         }
         return gmsResult;
     }
@@ -98,22 +80,27 @@ public class GmsCore {
     private static InstallResult installMicroGFromAsset(String assetName, String packageName, int userId) {
         BlackBoxCore core = BlackBoxCore.get();
         if (core.isInstalled(packageName, userId)) {
-            return new InstallResult().installSuccess(packageName);
+            InstallResult result = new InstallResult();
+            result.success = true;
+            result.packageName = packageName;
+            return result;
         }
         try {
-            java.io.File destFile = new java.io.File(top.niunaijun.blackbox.core.env.BEnvironment.getCacheDir(), assetName);
+            File destFile = new File(BEnvironment.getCacheDir(), assetName);
             if (!destFile.exists()) {
-                java.io.InputStream is = BlackBoxCore.getContext().getAssets().open(assetName);
-                top.niunaijun.blackbox.utils.FileUtils.copyFile(is, destFile);
+                InputStream is = BlackBoxCore.getContext().getAssets().open(assetName);
+                FileUtils.copyFile(is, destFile);
             }
-            top.niunaijun.blackbox.entity.pm.InstallOption option = top.niunaijun.blackbox.entity.pm.InstallOption.installBySystem();
-            return core.installPackageAsUser(destFile.getAbsolutePath(), option, userId);
+            // Use the proper 2-argument method (File, userId)
+            return core.installPackageAsUser(destFile, userId);
         } catch (Exception e) {
             Log.e(TAG, "Asset extraction failed for " + assetName, e);
-            return new InstallResult().installError(e.getMessage());
+            InstallResult err = new InstallResult();
+            err.success = false;
+            err.msg = e.getMessage();
+            return err;
         }
     }
-
 
     public static void uninstallGApps(int userId) {
         uninstallPackages(GOOGLE_SERVICE, userId);
@@ -124,7 +111,6 @@ public class GmsCore {
         GOOGLE_SERVICE.remove(packageName);
         GOOGLE_APP.remove(packageName);
     }
-
 
     public static boolean isSupportGms() {
         try {

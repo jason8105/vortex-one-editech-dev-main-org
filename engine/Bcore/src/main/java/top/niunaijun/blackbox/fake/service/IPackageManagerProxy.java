@@ -126,46 +126,55 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-       @ProxyMethod("getPackageInfo")
-    public static class GetPackageInfo extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String packageName = (String) args[0];
-            int flags = MethodParameterUtils.toInt(args[1]);
-            
-            // Handle fake Google Play Store / Services info
-            if ("com.android.vending".equals(packageName) || "com.google.android.gms".equals(packageName)) {
-                PackageInfo packageInfo = null;
-                if ("com.android.vending".equals(packageName)) {
-                    packageInfo = createFakeGooglePlayServicesPackageInfo();
-                } else {
-                    packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
-                }
+@ProxyMethod("getPackageInfo")
+public static class GetPackageInfo extends MethodHook {
+    @Override
+    protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+        String packageName = (String) args[0];
+        
+        // --- ADD THIS MAPPING ---
+        if ("com.google.android.gms".equals(packageName)) {
+            packageName = "app.revanced.android.gms";
+            args[0] = packageName;
+        }
+        // -------------------------
 
-                if (packageInfo != null) {
-                    // Inject valid host signatures so GoogleSignatureVerifier passes the cryptographic check
-                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-                        try {
-                            PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
-                                    .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
-                            packageInfo.signatures = realInfo.signatures;
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                packageInfo.signingInfo = realInfo.signingInfo;
-                            }
-                        } catch (Exception e) {
-                            Slog.e(TAG, "Signature spoofing failed", e);
-                        }
-                    }
-
-                    // Apply high version spoofing
-                    packageInfo.versionCode = 2100000000;
-                    packageInfo.versionName = "99.99.99";
-                    if (Build.VERSION.SDK_INT >= 28) {
-                        packageInfo.setLongVersionCode(2100000000L);
-                    }
-                    return packageInfo;
-                }
+        int flags = MethodParameterUtils.toInt(args[1]);
+        
+        // Handle fake Google Play Store / Services info
+        if ("com.android.vending".equals(packageName) || "app.revanced.android.gms".equals(packageName)) {
+            PackageInfo packageInfo = null;
+            if ("com.android.vending".equals(packageName)) {
+                packageInfo = createFakeGooglePlayServicesPackageInfo();
+            } else {
+                packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             }
+
+            if (packageInfo != null) {
+                // Inject valid host signatures so GoogleSignatureVerifier passes the cryptographic check
+                if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+                    try {
+                        PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
+                                .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
+                        packageInfo.signatures = realInfo.signatures;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            packageInfo.signingInfo = realInfo.signingInfo;
+                        }
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Signature spoofing failed", e);
+                    }
+                }
+
+                // Apply high version spoofing
+                packageInfo.versionCode = 2100000000;
+                packageInfo.versionName = "99.99.99";
+                if (Build.VERSION.SDK_INT >= 28) {
+                    packageInfo.setLongVersionCode(2100000000L);
+                }
+                return packageInfo;
+            }
+        }
+        
             
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {

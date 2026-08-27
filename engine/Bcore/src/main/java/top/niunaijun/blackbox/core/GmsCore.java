@@ -21,7 +21,9 @@ public class GmsCore {
 
     private static final HashSet<String> GOOGLE_APP = new HashSet<>();
     private static final HashSet<String> GOOGLE_SERVICE = new HashSet<>();
-    public static final String GMS_PKG = "com.google.android.gms";
+    
+    // Change this to match MicroG RE's package name
+    public static final String GMS_PKG = "app.revanced.android.gms";
     public static final String GSF_PKG = "com.google.android.gsf";
     public static final String VENDING_PKG = "com.android.vending";
     public static final String FALLBACK_AUTH_TOKEN = "fallback_gms_token_" + System.currentTimeMillis();
@@ -32,7 +34,7 @@ public class GmsCore {
         GOOGLE_APP.add("com.google.android.wearable.app");
         GOOGLE_APP.add("com.google.android.wearable.app.cn");
 
-        // GMS must install at first
+        // GMS services list
         GOOGLE_SERVICE.add(GMS_PKG);
         GOOGLE_SERVICE.add(GSF_PKG);
         GOOGLE_SERVICE.add("com.google.android.gsf.login");
@@ -64,8 +66,9 @@ public class GmsCore {
 
     // Option 1: Install MicroG and FakeStore directly from Assets instead of cloning host
     public static InstallResult installGApps(int userId) {
-        InstallResult gmsResult = installMicroGFromAsset("microg.apk", GMS_PKG, userId);
+                InstallResult gmsResult = installMicroGFromAsset("gms.apk", GMS_PKG, userId);
         InstallResult vendingResult = installMicroGFromAsset("vending.apk", VENDING_PKG, userId);
+
         
         if (!gmsResult.success || !vendingResult.success) {
             Log.w(TAG, "Failed to install MicroG packages from assets.");

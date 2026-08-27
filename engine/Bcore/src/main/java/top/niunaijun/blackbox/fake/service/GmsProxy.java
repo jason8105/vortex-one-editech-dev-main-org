@@ -24,7 +24,11 @@ public class GmsProxy extends BinderInvocationStub {
 
     @Override
     protected Object getWho() {
+        // Look for both standard GMS and MicroG RE (app.revanced.android.gms) binder services
         IBinder binder = BRServiceManager.get().getService("gms");
+        if (binder == null) {
+            binder = BRServiceManager.get().getService("app.revanced.android.gms");
+        }
         if (binder == null) {
             Slog.e(TAG, "Failed to get gms service binder");
             return null;
@@ -34,21 +38,19 @@ public class GmsProxy extends BinderInvocationStub {
             Method asInterfaceMethod = stubClass.getMethod("asInterface", IBinder.class);
             Object iface = asInterfaceMethod.invoke(null, binder);
             if (iface != null) {
-                Slog.d(TAG, "Successfully obtained IGmsServiceBroker interface");
+                Slog.d(TAG, "Successfully obtained IGmsServiceBroker interface for MicroG RE");
                 return iface;
-            } else {
-                Slog.e(TAG, "Reflection succeeded but returned null interface");
-                return null;
             }
         } catch (Exception e) {
             Slog.e(TAG, "Failed to get IGmsServiceBroker interface", e);
-            return null;
         }
+        return null;
     }
 
     @Override
     protected void inject(Object baseInvocation, Object proxyInvocation) {
         replaceSystemService("gms");
+        replaceSystemService("app.revanced.android.gms");
     }
 
     @Override
@@ -56,7 +58,6 @@ public class GmsProxy extends BinderInvocationStub {
         return false;
     }
 
-    // Hook getService to handle package name validation and GetServiceRequest objects
     @ProxyMethod("getService")
     public static class GetService extends MethodHook {
         @Override
@@ -72,30 +73,11 @@ public class GmsProxy extends BinderInvocationStub {
                         Object arg = args[i];
                         if (arg instanceof String) {
                             String str = (String) arg;
-                            // Allow valid virtual client package names through instead of overriding everything to host package
-                            if (str != null && (str.equals("com.google.android.gms") || str.equals("com.android.vending"))) {
+                            // Map incoming GMS requests to MicroG RE's package name safely
+                            if (str != null && (str.equals("com.google.android.gms") || str.equals("app.revanced.android.gms") || str.equals("com.android.vending"))) {
                                 args[i] = currentCallingPkg;
-                                Slog.d(TAG, "GmsProxy: Mapped system service package to " + currentCallingPkg);
+                                Slog.d(TAG, "GmsProxy: Mapped package argument to " + currentCallingPkg);
                             }
-                        } else if (arg != null) {
-                            // Check for GetServiceRequest object and rewrite callingPackage fields safely
-                            try {
-                                java.lang.reflect.Field[] fields = arg.getClass().getDeclaredFields();
-                                for (java.lang.reflect.Field f : fields) {
-                                    if (f.getType() == String.class) {
-                                        String name = f.getName().toLowerCase();
-                                        if (name.contains("package") || name.contains("calling") || name.contains("client")) {
-                                            f.setAccessible(true);
-                                            Object val = f.get(arg);
-                                            if (val instanceof String) {
-                                                // Retain actual package if it belongs to the sandbox client, otherwise map safely
-                                                f.set(arg, currentCallingPkg);
-                                                Slog.d(TAG, "GmsProxy: Safely mapped GetServiceRequest field " + f.getName() + " to " + currentCallingPkg);
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (Throwable ignored) {}
                         }
                     }
                 }
@@ -106,6 +88,7 @@ public class GmsProxy extends BinderInvocationStub {
             }
         }
     }
+}
 
 
     // Hook getServiceBroker to handle service broker issues
