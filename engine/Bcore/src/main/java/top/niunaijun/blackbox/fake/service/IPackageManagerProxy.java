@@ -253,7 +253,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                     if (KNOWN_GOOGLE_PACKAGES.contains(pkg) || pkg.equals(BActivityThread.getAppPackageName())) {
                         return android.os.Process.myUid(); 
                     }
-                    // Validate if the requested package is installed inside BlackBox
                     try {
                         ApplicationInfo info = BlackBoxCore.getBPackageManager().getApplicationInfo(pkg, 0, BActivityThread.getUserId());
                         if (info != null) {
@@ -293,11 +292,13 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             try {
                 if (args != null && args.length > 0 && args[0] instanceof Integer) {
                     int uid = (Integer) args[0];
-                    
-                    if (uid == BlackBoxCore.getHostUid() || uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
+                    if (uid == BlackBoxCore.getHostUid()) {
+                        uid = BActivityThread.getBUid();
+                    }
+
+                    if (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
                         List<String> pkgList = new ArrayList<>();
                         
-                        // INJECT ALL INSTALLED VIRTUAL APPS SO GMS CAN VERIFY THE GAME
                         List<PackageInfo> installedPackages = BlackBoxCore.getBPackageManager().getInstalledPackages(0, BActivityThread.getUserId());
                         if (installedPackages != null) {
                             for (PackageInfo info : installedPackages) {
@@ -318,6 +319,9 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
                         return pkgList.toArray(new String[0]);
                     }
+
+                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+                    if (pkgs != null && pkgs.length > 0) return pkgs;
                 }
             } catch (Exception ignored) {}
             return method.invoke(who, args);
@@ -419,7 +423,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             return null;
         }
     }
-
 
     @ProxyMethod("queryContentProviders")
     public static class QueryContentProviders extends MethodHook {
@@ -529,7 +532,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
     public static class RequestPermissions extends MethodHook {
         @Override
-        protected Object hook(Object who, method, Object[] args) throws Throwable {
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             return new int[0];
         }
     }
