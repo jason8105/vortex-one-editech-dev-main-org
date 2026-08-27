@@ -109,9 +109,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         addMethodHook(new CheckSelfPermission());
         addMethodHook(new ShouldShowRequestPermissionRationale());
         addMethodHook(new RequestPermissions());
-        addMethodHook(new DisableIconLoading());
-        addMethodHook(new SetSplashScreenTheme());
-        addMethodHook(new XiaomiSecurityBypass());
     }
 
     private static void spoofPackageInfo(PackageInfo packageInfo) {
@@ -215,11 +212,16 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                     }
                 }
 
-                packageInfo.versionCode = 2100000000;
-                packageInfo.versionName = "99.99.99";
-                if (Build.VERSION.SDK_INT >= 28) {
-                    packageInfo.setLongVersionCode(2100000000L);
+                // CRITICAL FIX: Only spoof version numbers for Google packages. 
+                // Spoofing the version for the games broke their Unity asset loaders.
+                if (KNOWN_GOOGLE_PACKAGES.contains(packageInfo.packageName.toLowerCase())) {
+                    packageInfo.versionCode = 2100000000;
+                    packageInfo.versionName = "99.99.99";
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        packageInfo.setLongVersionCode(2100000000L);
+                    }
                 }
+
                 return packageInfo;
             }
             if (AppSystemEnv.isOpenPackage(packageName)) return method.invoke(who, args);
@@ -530,31 +532,11 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
+    @ProxyMethod("requestPermissions")
     public static class RequestPermissions extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             return new int[0];
-        }
-    }
-
-    public static class DisableIconLoading extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return null;
-        }
-    }
-
-    public static class SetSplashScreenTheme extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return null;
-        }
-    }
-
-    public static class XiaomiSecurityBypass extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            return null;
         }
     }
 }
