@@ -16,6 +16,8 @@ import android.util.Base64;
 import android.util.Log;
 import android.util.Pair;
 
+import org.lsposed.hiddenapibypass.HiddenApiBypass;
+
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 public class SpoofUtil {
+    // Explicitly expanded with Play Games, GMS, and Vending for seamless authentication
     public static List<String> KNOWN_GOOGLE_PACKAGES = Arrays.asList(
             "com.google.android.gms",
             "com.android.vending",
@@ -278,15 +281,8 @@ public class SpoofUtil {
 
             findField(PackageInfo.class, "CREATOR").set(null, creator);
 
-            // Bypass hidden API restrictions using standard runtime reflection
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                try {
-                    Method setHiddenApiExemptions = Class.forName("dalvik.system.VMRuntime").getDeclaredMethod("setHiddenApiExemptions", String[].class);
-                    setHiddenApiExemptions.setAccessible(true);
-                    Object vmRuntime = Class.forName("dalvik.system.VMRuntime").getMethod("getRuntime").invoke(null);
-                    setHiddenApiExemptions.invoke(vmRuntime, new Object[]{new String[]{"L"}});
-                } catch (Throwable ignored) {
-                }
+                HiddenApiBypass.addHiddenApiExemptions("Landroid/os/Parcel;", "Landroid/content/pm", "Landroid/app");
             }
             
             try {
