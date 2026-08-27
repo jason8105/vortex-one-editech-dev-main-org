@@ -201,16 +201,14 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                 if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
                     return currentPkg;
                 }
+                try {
+                    String pkgName = BlackBoxCore.getContext().getPackageManager().getNameForUid(uid);
+                    if (pkgName != null) {
+                        return pkgName;
+                    }
+                } catch (Exception ignored) {}
             }
-            int uid = (Integer) args[0];
-            String pkgName = BlackBoxCore.getBPackageManager().getNameForUid(uid);
-            if (pkgName == null) {
-                String activePkg = BActivityThread.getAppPackageName();
-                if (activePkg != null) {
-                    return activePkg;
-                }
-            }
-            return pkgName != null ? pkgName : method.invoke(who, args);
+            return method.invoke(who, args);
         }
     }
 
@@ -224,18 +222,17 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                 if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
                     return new String[]{currentPkg};
                 }
+                try {
+                    String[] packagesForUid = BlackBoxCore.getContext().getPackageManager().getPackagesForUid(uid);
+                    if (packagesForUid != null && packagesForUid.length > 0) {
+                        return packagesForUid;
+                    }
+                } catch (Exception ignored) {}
             }
-            int uid = (Integer) args[0];
-            String[] packagesForUid = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
-            if (packagesForUid == null || packagesForUid.length == 0) {
-                String activePkg = BActivityThread.getAppPackageName();
-                if (activePkg != null) {
-                    return new String[]{activePkg};
-                }
-            }
-            return packagesForUid != null ? packagesForUid : (String[]) method.invoke(who, args);
+            return method.invoke(who, args);
         }
     }
+
 
     @ProxyMethod("getProviderInfo")
     public static class GetProviderInfo extends MethodHook {

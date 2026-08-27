@@ -9,27 +9,24 @@ import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.content.pm.Signature;
 import android.os.Build;
-import android.util.Log;
+import android.util.Base64;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import black.android.app.BRActivityThread;
 import black.android.app.BRContextImpl;
-import black.android.app.ContextImpl;
 import black.android.content.pm.BRPackageManager;
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.core.env.AppSystemEnv;
-import top.niunaijun.blackbox.fake.FakeCore;
 import top.niunaijun.blackbox.fake.hook.BinderInvocationStub;
 import top.niunaijun.blackbox.fake.hook.MethodHook;
 import top.niunaijun.blackbox.fake.hook.ProxyMethod;
-import top.niunaijun.blackbox.fake.service.base.PkgMethodProxy;
 import top.niunaijun.blackbox.fake.service.base.ValueMethodProxy;
 import top.niunaijun.blackbox.utils.MethodParameterUtils;
 import top.niunaijun.blackbox.utils.Reflector;
@@ -37,9 +34,37 @@ import top.niunaijun.blackbox.utils.Slog;
 import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 
-
 public class IPackageManagerProxy extends BinderInvocationStub {
     public static final String TAG = "PackageManagerStub";
+
+    private static final List<String> KNOWN_GOOGLE_PACKAGES = Arrays.asList(
+            "com.google.android.gms",
+            "com.android.vending",
+            "com.google.android.gsf",
+            "com.google.android.play.games"
+    );
+
+    private static final String FAKE_GOOGLE_SIGNATURE =
+            "MIIEQzCCAyugAwIBAgIJAMLgh0ZkSjCNMA0GCSqGSIb3DQEBBAUAMHQxCzAJBgNVBAYTAlVTMRMw\n" +
+            "EQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29n\n" +
+            "bGUgSW5jLjEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDAeFw0wODA4MjEyMzEz\n" +
+            "MzRaFw0zNjAxMDcyMzEzMzRaMHQxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYw\n" +
+            "FAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29nbGUgSW5jLjEQMA4GA1UECxMHQW5k\n" +
+            "cm9pZDEQMA4GA1UEAxMHQW5kcm9pZDCCASAwDQYJKoZIhvcNAQEBBQADggENADCCAQgCggEBAKtW\n" +
+            "LgDYO6IIrgqWbxJOKdoR8qtW0I9Y4sypEwPpt1TTcvZApxsdyxMJZ2JORland2qSGT2y5b+3JKke\n" +
+            "dxiLDmpHpDsz2WCbdxgxRczfey5YZnTJ4VZbH0xqWVW/8lGmPav5xVwnIiJS6HXk+BVKZF+JcWjA\n" +
+            "sb/GEuq/eFdpuzSqeYTcfi6idkyugwfYwXFU1+5fZKUaRKYCwkkFQVfcAs1fXA5V+++FGfvjJ/Cx\n" +
+            "URaSxaBvGdGDhfXE28LWuT9ozCl5xw4Yq5OGazvV24mZVSoOO0yZ31j7kYvtwYK6NeADwbSxDdJE\n" +
+            "qO4k//0zOHKrUiGYXtqw/A0LFFtqoZKFjnkCAQOjgdkwgdYwHQYDVR0OBBYEFMd9jMIhF1Ylmn/T\n" +
+            "gt9r45jk14alMIGmBgNVHSMEgZ4wgZuAFMd9jMIhF1Ylmn/Tgt9r45jk14aloXikdjB0MQswCQYD\n" +
+            "VQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEUMBIG\n" +
+            "A1UEChMLR29vZ2xlIEluYy4xEDAOBgNVBAsTB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWSCCQDC\n" +
+            "4IdGZEowjTAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBBAUAA4IBAQBt0lLO74UwLDYKqs6Tm8/y\n" +
+            "zKkEu116FmH4rkaymUIE0P9KaMftGlMexFlaYjzmB2OxZyl6euNXEsQH8gjwyxCUKRJNexBiGcCE\n" +
+            "yj6z+a1fuHHvkiaai+KL8W1EyNmgjmyy8AW7P+LLlkR+ho5zEHatRbM/YAnqGcFh5iZBqpknHf1S\n" +
+            "KMXFh4dd239FJ1jWYfbMDMy3NS5CTMQ2XFI1MvcyUTdZPErjQfTbQe3aDQsQcafEQPD+nqActifK\n" +
+            "Z0Np0IS9L9kR/wbNvyz6ENwPiTrjV2KRkEjH78ZMcUQXg0L3BYHJ3lc69Vs5Ddf9uUGGMYldX3Wf\n" +
+            "MBEmh/9iFBDAaTCK\n";
 
     public IPackageManagerProxy() {
         super(BRActivityThread.get().sPackageManager().asBinder());
@@ -88,6 +113,46 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         addMethodHook(new XiaomiSecurityBypass());
     }
 
+    private static void spoofPackageInfo(PackageInfo packageInfo) {
+        if (packageInfo != null && packageInfo.packageName != null) {
+            if (KNOWN_GOOGLE_PACKAGES.contains(packageInfo.packageName.toLowerCase())) {
+                try {
+                    byte[] sigBytes = Base64.decode(FAKE_GOOGLE_SIGNATURE, Base64.DEFAULT);
+                    Signature signature = new Signature(sigBytes);
+                    packageInfo.signatures = new Signature[]{signature};
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageInfo.signingInfo != null) {
+                        Signature[] signers = packageInfo.signingInfo.getApkContentsSigners();
+                        if (signers != null && signers.length > 0) {
+                            signers[0] = signature;
+                        }
+                    }
+                } catch (Exception e) {
+                    Slog.e(TAG, "Failed to spoof signature for package: " + packageInfo.packageName, e);
+                }
+            }
+        }
+    }
+
+    @ProxyMethod("getPackageInfo")
+    public static class GetPackageInfo extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            PackageInfo packageInfo = (PackageInfo) method.invoke(who, args);
+            spoofPackageInfo(packageInfo);
+            return packageInfo;
+        }
+    }
+
+    @ProxyMethod("getPackageInfoAsUser")
+    public static class GetPackageInfoAsUser extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            PackageInfo packageInfo = (PackageInfo) method.invoke(who, args);
+            spoofPackageInfo(packageInfo);
+            return packageInfo;
+        }
+    }
+
     @ProxyMethod("resolveIntent")
     public static class ResolveIntent extends MethodHook {
         @Override
@@ -130,6 +195,13 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class GetNameForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                int uid = (Integer) args[0];
+                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
+                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
+                    return currentPkg;
+                }
+            }
             int uid = (Integer) args[0];
             String pkgName = BlackBoxCore.getBPackageManager().getNameForUid(uid);
             if (pkgName == null) {
@@ -146,6 +218,13 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class GetPackagesForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                int uid = (Integer) args[0];
+                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
+                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
+                    return new String[]{currentPkg};
+                }
+            }
             int uid = (Integer) args[0];
             String[] packagesForUid = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
             if (packagesForUid == null || packagesForUid.length == 0) {
@@ -157,7 +236,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             return packagesForUid != null ? packagesForUid : (String[]) method.invoke(who, args);
         }
     }
-
 
     @ProxyMethod("getProviderInfo")
     public static class GetProviderInfo extends MethodHook {
@@ -209,7 +287,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
     @ProxyMethod("getServiceInfo")
     public static class GetServiceInfo extends MethodHook {
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
@@ -226,7 +303,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
     @ProxyMethod("getInstalledApplications")
     public static class GetInstalledApplications extends MethodHook {
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             int flags = MethodParameterUtils.toInt(args[0]);
@@ -237,7 +313,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
 
     @ProxyMethod("getInstalledPackages")
     public static class GetInstalledPackages extends MethodHook {
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             int flags = MethodParameterUtils.toInt(args[0]);
@@ -251,11 +326,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
-
             int flags = MethodParameterUtils.toInt(args[1]);
-//            if (ClientSystemEnv.isFakePackage(packageName)) {
-//                packageName = BlackBoxCore.getHostPkg();
-//            }
             ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName, flags, BlackBoxCore.getUserId());
             if (applicationInfo != null) {
                 return applicationInfo;
@@ -288,12 +359,9 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             List<ResolveInfo> resolves = BlackBoxCore.getBPackageManager().queryBroadcastReceivers(intent, flags, type, BActivityThread.getUserId());
             Slog.d(TAG, "queryIntentReceivers: " + resolves);
 
-            // http://androidxref.com/7.0.0_r1/xref/frameworks/base/core/java/android/app/ApplicationPackageManager.java#872
             if (BuildCompat.isN()) {
                 return ParceledListSliceCompat.create(resolves);
             }
-
-            // http://androidxref.com/6.0.1_r10/xref/frameworks/base/core/java/android/app/ApplicationPackageManager.java#699
             return resolves;
         }
     }
@@ -321,42 +389,10 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-    @ProxyMethod("getNameForUid")
-    public static class GetNameForUid extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                int uid = (Integer) args[0];
-                // If it's a virtual UID belonging to our container process, return the correct active package name
-                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
-                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
-                    return currentPkg;
-                }
-            }
-            return method.invoke(who, args);
-        }
-    }
-
-    @ProxyMethod("getPackagesForUid")
-    public static class GetPackagesForUid extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                int uid = (Integer) args[0];
-                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
-                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
-                    return new String[]{currentPkg};
-                }
-            }
-            return method.invoke(who, args);
-        }
-    }
-
     @ProxyMethod("getInstallerPackageName")
     public static class GetInstallerPackageName extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // fake google play
             return "com.android.vending";
         }
     }
@@ -365,7 +401,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class GetSharedLibraries extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // todo
             return ParceledListSliceCompat.create(new ArrayList<>());
         }
     }
@@ -376,13 +411,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             ComponentName componentName = (ComponentName) args[0];
             String packageName = componentName.getPackageName();
-            ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName,0, BActivityThread.getUserId());
-//            if(applicationInfo == null){
-//                throw new IllegalArgumentException();
-//            }else{
-//                return PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
-//            }
-            if(applicationInfo != null){
+            ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName, 0, BActivityThread.getUserId());
+            if (applicationInfo != null) {
                 return PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
             }
             if (AppSystemEnv.isOpenPackage(componentName)) {
@@ -392,37 +422,13 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-
-
-
-
     @ProxyMethod("checkPermission")
     public static class SimpleAudioPermissionHook extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String permission = (String) args[0];
             String packageName = (String) args[1];
-            
-            // Handle all audio-related permissions comprehensively
-            if (isAudioPermission(permission)) {
-                Slog.d(TAG, "SimpleAudioPermissionHook: Granting audio permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-
-            // Also grant storage/media read permissions so hosted apps can see device media
-            if (isStorageOrMediaPermission(permission)) {
-                Slog.d(TAG, "SimpleAudioPermissionHook: Granting storage/media permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-            
-            // Grant notification and Xiaomi permissions automatically
-            if (isNotificationOrXiaomiPermission(permission)) {
-                Slog.d(TAG, "SimpleAudioPermissionHook: Granting notification/Xiaomi permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-            
-            // For all other permissions, use the original method
-            return method.invoke(who, args);
+            return PackageManager.PERMISSION_GRANTED;
         }
     }
 
@@ -430,29 +436,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class CheckSelfPermission extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String permission = (String) args[0];
-            String packageName = (String) args[1];
-            
-            // Handle all audio-related permissions comprehensively
-            if (isAudioPermission(permission)) {
-                Slog.d(TAG, "CheckSelfPermission: Granting audio permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-
-            // Handle storage/media read permissions
-            if (isStorageOrMediaPermission(permission)) {
-                Slog.d(TAG, "CheckSelfPermission: Granting storage/media permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-            
-            // Grant notification and Xiaomi permissions automatically
-            if (isNotificationOrXiaomiPermission(permission)) {
-                Slog.d(TAG, "CheckSelfPermission: Granting notification/Xiaomi permission: " + permission + " to " + packageName);
-                return PackageManager.PERMISSION_GRANTED;
-            }
-            
-            // For all other permissions, use the original method
-            return method.invoke(who, args);
+            return PackageManager.PERMISSION_GRANTED;
         }
     }
 
@@ -460,282 +444,35 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class ShouldShowRequestPermissionRationale extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String permission = (String) args[0];
-            String packageName = (String) args[1];
-            
-            // For audio permissions, don't show rationale since we grant them automatically
-            if (isAudioPermission(permission)) {
-                Slog.d(TAG, "ShouldShowRequestPermissionRationale: Not showing rationale for audio permission: " + permission);
-                return false;
-            }
-
-            // For storage/media, also suppress rationale (we auto-grant)
-            if (isStorageOrMediaPermission(permission)) {
-                Slog.d(TAG, "ShouldShowRequestPermissionRationale: Not showing rationale for storage/media permission: " + permission);
-                return false;
-            }
-            
-            // For notification and Xiaomi permissions, don't show rationale (we auto-grant)
-            if (isNotificationOrXiaomiPermission(permission)) {
-                Slog.d(TAG, "ShouldShowRequestPermissionRationale: Not showing rationale for notification/Xiaomi permission: " + permission);
-                return false;
-            }
-            
-            // For all other permissions, use the original method
-            return method.invoke(who, args);
+            return false;
         }
     }
 
-    @ProxyMethod("requestPermissions")
     public static class RequestPermissions extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String[] permissions = (String[]) args[0];
-            String packageName = (String) args[1];
-            
-            // Do not filter permissions here; allow system flow to proceed so apps get callbacks.
-            // The actual permission granting is handled by checkPermission/checkSelfPermission hooks
-            if (permissions != null) {
-                Slog.d(TAG, "RequestPermissions: Allowing permission request flow for: " + java.util.Arrays.toString(permissions));
-            }
-            
-            return method.invoke(who, args);
+            return new int[0];
         }
     }
 
-    @ProxyMethod("getDrawable")
     public static class DisableIconLoading extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // Prevent icon loading that triggers resource issues
-            Slog.d(TAG, "Blocking icon loading to prevent resource errors");
-            return null; // Return null instead of trying to load the icon
+            return null;
         }
     }
 
-    // Helper: recognize storage/media read permissions across API levels
-    private static boolean isStorageOrMediaPermission(String permission) {
-        if (permission == null) return false;
-        // Legacy storage & All Files Access
-        if (permission.equals(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                || permission.equals(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                || permission.equals("android.permission.MANAGE_EXTERNAL_STORAGE")) {
-            return true;
-        }
-        // Android 13+ granular media
-        if (permission.equals(android.Manifest.permission.READ_MEDIA_AUDIO)
-                || permission.equals(android.Manifest.permission.READ_MEDIA_VIDEO)
-                || permission.equals(android.Manifest.permission.READ_MEDIA_IMAGES)
-                || permission.equals("android.permission.READ_MEDIA_VISUAL")
-                || permission.equals("android.permission.READ_MEDIA_AURAL")
-                || permission.equals(android.Manifest.permission.ACCESS_MEDIA_LOCATION)) {
-            return true;
-        }
-        // Android 14/15 user-selected media
-        if (permission.equals("android.permission.READ_MEDIA_AUDIO_USER_SELECTED")
-                || permission.equals("android.permission.READ_MEDIA_VIDEO_USER_SELECTED")
-                || permission.equals("android.permission.READ_MEDIA_IMAGES_USER_SELECTED")
-                || permission.equals("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
-                || permission.equals("android.permission.READ_MEDIA_AURAL_USER_SELECTED")) {
-            return true;
-        }
-        return false;
-    }
-
-    // Helper: recognize all audio-related permissions across API levels
-    private static boolean isAudioPermission(String permission) {
-        if (permission == null) return false;
-        return permission.equals(android.Manifest.permission.RECORD_AUDIO)
-                || permission.equals(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
-                || permission.equals(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                || permission.equals("android.permission.FOREGROUND_SERVICE_MICROPHONE")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_CAMERA")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_LOCATION")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_HEALTH")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_DATA_SYNC")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_SPECIAL_USE")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_PHONE_CALL")
-                || permission.equals("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE");
-    }
-    
-    // Helper: recognize notification and Xiaomi-specific permissions
-    private static boolean isNotificationOrXiaomiPermission(String permission) {
-        if (permission == null) return false;
-        
-        // Android 12+ notification & Bluetooth permissions
-        if (permission.equals("android.permission.POST_NOTIFICATIONS") ||
-            permission.equals("android.permission.BLUETOOTH_SCAN") ||
-            permission.equals("android.permission.BLUETOOTH_CONNECT") ||
-            permission.equals("android.permission.BLUETOOTH_ADVERTISE")) {
-            return true;
-        }
-        
-        // GMS Safety Center permissions (Fixes GmsIntentOperationChimeraService crash)
-        if (permission.equals("android.permission.READ_SAFETY_CENTER_STATUS") || 
-            permission.equals("android.permission.SEND_SAFETY_CENTER_UPDATE")) {
-            return true;
-        }
-
-        // Xiaomi-specific permissions
-        if (permission.equals("miui.permission.USE_INTERNAL_GENERAL_API") ||
-            permission.equals("miui.permission.OPTIMIZE_POWER") ||
-            permission.equals("miui.permission.RUN_IN_BACKGROUND") ||
-            permission.equals("miui.permission.POST_NOTIFICATIONS") ||
-            permission.equals("miui.permission.AUTO_START") ||
-            permission.equals("miui.permission.BACKGROUND_POPUP_WINDOW") ||
-            permission.equals("miui.permission.SHOW_WHEN_LOCKED") ||
-            permission.equals("miui.permission.TURN_SCREEN_ON")) {
-            return true;
-        }
-        
-        return false;
-    }
-
-    @ProxyMethod("setSplashScreenTheme")
     public static class SetSplashScreenTheme extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            // Bypass UID ownership check for setSplashScreenTheme
-            // This method fails with "Calling uid X does not own package Y" in virtual environment
-            // Especially problematic on Xiaomi HyperOS (Android 15) with enhanced security
-            String packageName = args.length > 0 ? (String) args[0] : "unknown";
-            Slog.d(TAG, "SetSplashScreenTheme: Bypassing UID check for package: " + packageName);
-            
-            // Check if we're on Xiaomi/MIUI system
-            boolean isXiaomi = BuildCompat.isMIUI() || 
-                              Build.MANUFACTURER.toLowerCase().contains("xiaomi") ||
-                              Build.BRAND.toLowerCase().contains("xiaomi") ||
-                              Build.DISPLAY.toLowerCase().contains("hyperos");
-                              
-            if (isXiaomi) {
-                Slog.d(TAG, "SetSplashScreenTheme: Detected Xiaomi/HyperOS, using enhanced bypass");
-                // On Xiaomi systems, completely skip the call to avoid security exceptions
-                return null;
-            }
-            
-            // For other systems, try to call the original method but catch any SecurityException
-            try {
-                return method.invoke(who, args);
-            } catch (SecurityException e) {
-                Slog.w(TAG, "SetSplashScreenTheme: SecurityException caught, bypassing: " + e.getMessage());
-                return null;
-            } catch (Exception e) {
-                // If it's wrapped in reflection exception, check the cause
-                if (e.getCause() instanceof SecurityException) {
-                    Slog.w(TAG, "SetSplashScreenTheme: SecurityException (wrapped) caught, bypassing: " + e.getCause().getMessage());
-                    return null;
-                }
-                throw e; // Re-throw other exceptions
-            }
+            return null;
         }
     }
 
-    // Comprehensive Xiaomi/HyperOS security bypass for multiple methods
     public static class XiaomiSecurityBypass extends MethodHook {
-        private static final String[] XIAOMI_SECURITY_METHODS = {
-            "setApplicationEnabledSetting",
-            "setComponentEnabledSetting", 
-            "setInstallLocation",
-            "setInstallerPackageName",
-            "setPackageStoppedState",
-            "setSystemAppState",
-            "setApplicationCategoryHint",
-            "setApplicationHiddenSettingAsUser",
-            "setBlockUninstallForUser",
-            "setDefaultBrowserPackageNameAsUser",
-            "setDistractingPackageRestrictionsAsUser",
-            "setPackagesSuspendedAsUser",
-            "setUpdateAvailable",
-            "setRequiredForSystemUser",
-            "setSystemAppHiddenUntilInstalled",
-            "setHarmfulAppWarningEnabled",
-            "setKeepUninstalledPackages",
-            "verifyIntentFilter",
-            "verifyPendingInstall",
-            "extendVerificationTimeout",
-            "setDefaultHomeActivity",
-            "resetApplicationPreferences",
-            "clearApplicationProfileData",
-            "clearApplicationUserData",
-            "deleteApplicationCacheFiles",
-            "deleteApplicationCacheFilesAsUser",
-            "freeStorageAndNotify",
-            "freeStorage",
-            "movePackage",
-            "movePackageToSd",
-            "movePrimaryStorage"
-        };
-
-        @Override
-        public boolean isEnable() {
-            // Only enable on Xiaomi/HyperOS systems
-            return BuildCompat.isMIUI() || 
-                   Build.MANUFACTURER.toLowerCase().contains("xiaomi") ||
-                   Build.BRAND.toLowerCase().contains("xiaomi") ||
-                   Build.DISPLAY.toLowerCase().contains("hyperos");
-        }
-
-        @Override
-        public String getMethodName() {
-            return null; // We handle multiple methods
-        }
-
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String methodName = method.getName();
-            
-            // Check if this is a Xiaomi security-sensitive method
-            for (String securityMethod : XIAOMI_SECURITY_METHODS) {
-                if (securityMethod.equals(methodName)) {
-                    Slog.d(TAG, "XiaomiSecurityBypass: Intercepting " + methodName + " on Xiaomi/HyperOS");
-                    
-                    // For methods that return void, just return null
-                    if (method.getReturnType() == void.class) {
-                        return null;
-                    }
-                    // For methods that return boolean, return true (success)
-                    else if (method.getReturnType() == boolean.class) {
-                        return true;
-                    }
-                    // For methods that return int, return 0 (success)
-                    else if (method.getReturnType() == int.class) {
-                        return 0;
-                    }
-                    // For other return types, return null
-                    else {
-                        return null;
-                    }
-                }
-            }
-            
-            // Not a security method, proceed normally but catch SecurityExceptions
-            try {
-                return method.invoke(who, args);
-            } catch (SecurityException e) {
-                Slog.w(TAG, "XiaomiSecurityBypass: SecurityException in " + methodName + ", bypassing: " + e.getMessage());
-                // Return appropriate default based on return type
-                if (method.getReturnType() == boolean.class) {
-                    return false;
-                } else if (method.getReturnType() == int.class) {
-                    return -1;
-                } else {
-                    return null;
-                }
-            } catch (Exception e) {
-                if (e.getCause() instanceof SecurityException) {
-                    Slog.w(TAG, "XiaomiSecurityBypass: SecurityException (wrapped) in " + methodName + ", bypassing: " + e.getCause().getMessage());
-                    if (method.getReturnType() == boolean.class) {
-                        return false;
-                    } else if (method.getReturnType() == int.class) {
-                        return -1;
-                    } else {
-                        return null;
-                    }
-                }
-                throw e;
-            }
+            return null;
         }
     }
 }
