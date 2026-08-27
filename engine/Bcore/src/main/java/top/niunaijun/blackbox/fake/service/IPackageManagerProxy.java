@@ -126,59 +126,34 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-@ProxyMethod("getPackageInfo")
-public static class GetPackageInfo extends MethodHook {
-    @Override
-    protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-        String packageName = (String) args[0];
-        
-        // --- ADD THIS MAPPING ---
-        if ("com.google.android.gms".equals(packageName)) {
-            packageName = "app.revanced.android.gms";
-            args[0] = packageName;
-        }
-        // -------------------------
-
-        int flags = MethodParameterUtils.toInt(args[1]);
-        
-        // Handle fake Google Play Store / Services info
-        if ("com.android.vending".equals(packageName) || "app.revanced.android.gms".equals(packageName)) {
-            PackageInfo packageInfo = null;
-            if ("com.android.vending".equals(packageName)) {
-                packageInfo = createFakeGooglePlayServicesPackageInfo();
-            } else {
-                packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
-            }
-
-            if (packageInfo != null) {
-                // Inject valid host signatures so GoogleSignatureVerifier passes the cryptographic check
-                if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-                    try {
-                        PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
-                                .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
-                        packageInfo.signatures = realInfo.signatures;
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            packageInfo.signingInfo = realInfo.signingInfo;
-                        }
-                    } catch (Exception e) {
-                        Slog.e(TAG, "Signature spoofing failed", e);
-                    }
-                }
-
-                // Apply high version spoofing
-                packageInfo.versionCode = 2100000000;
-                packageInfo.versionName = "99.99.99";
-                if (Build.VERSION.SDK_INT >= 28) {
-                    packageInfo.setLongVersionCode(2100000000L);
-                }
-                return packageInfo;
-            }
-        }
-        
+    @ProxyMethod("getPackageInfo")
+    public static class GetPackageInfo extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            String packageName = (String) args[0];
+            int flags = MethodParameterUtils.toInt(args[1]);
             
-            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
-            if (packageInfo != null) {
-                if ("com.google.android.gms".equals(packageName) || "com.android.gsf".equals(packageName)) {
+            // Map standard GMS calls to MicroG RE
+            if ("com.google.android.gms".equals(packageName)) {
+                packageName = "app.revanced.android.gms";
+                args[0] = packageName;
+            }
+            
+            if ("com.android.vending".equals(packageName) || "app.revanced.android.gms".equals(packageName)) {
+                PackageInfo packageInfo = null;
+                if ("com.android.vending".equals(packageName)) {
+                    packageInfo = createFakeGooglePlayServicesPackageInfo();
+                } else {
+                    packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo("app.revanced.android.gms", flags, BlackBoxCore.getUserId());
+                }
+
+                if (packageInfo != null) {
+                    packageInfo.packageName = packageName;
+                    if (packageInfo.applicationInfo != null) {
+                        packageInfo.applicationInfo.packageName = packageName;
+                    }
+
+                    // Inject valid host signatures so cryptographic checks pass
                     if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
                         try {
                             PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
@@ -191,8 +166,19 @@ public static class GetPackageInfo extends MethodHook {
                             Slog.e(TAG, "Signature spoofing failed", e);
                         }
                     }
-                }
 
+                    packageInfo.versionCode = 2100000000;
+                    packageInfo.versionName = "99.99.99";
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        packageInfo.setLongVersionCode(2100000000L);
+                    }
+                    return packageInfo;
+                }
+            }
+            
+            // Fallback for regular packages
+            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
+            if (packageInfo != null) {
                 if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
                     for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
                         String perm = packageInfo.requestedPermissions[i];
@@ -201,18 +187,17 @@ public static class GetPackageInfo extends MethodHook {
                                 || perm.equals(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
                                 || perm.equals(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
                                 || perm.equals("android.permission.READ_SAFETY_CENTER_STATUS")
-                                || perm.equals("android.permission.SEND_SAFETY_CENTER_UPDATE"))) {
+                                || perm.equals("android.permission.SEND_SAFETY_CENTER_UPDATE")
+                                || perm.equals("android.permission.BLUETOOTH_SCAN"))) {
                             packageInfo.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
                         }
                     }
                 }
-
                 packageInfo.versionCode = 2100000000;
                 packageInfo.versionName = "99.99.99";
                 if (Build.VERSION.SDK_INT >= 28) {
                     packageInfo.setLongVersionCode(2100000000L);
                 }
-
                 return packageInfo;
             }
             if (AppSystemEnv.isOpenPackage(packageName)) {
@@ -233,8 +218,6 @@ public static class GetPackageInfo extends MethodHook {
             appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
             appInfo.uid = 10001; 
             packageInfo.applicationInfo = appInfo;
-            
-            Slog.d(TAG, "GetPackageInfo: Providing fake Google Play Services info");
             return packageInfo;
         }
     }
@@ -638,8 +621,11 @@ public static class GetPackageInfo extends MethodHook {
     private static boolean isNotificationOrXiaomiPermission(String permission) {
         if (permission == null) return false;
         
-        // Android 12+ notification permission
-        if (permission.equals("android.permission.POST_NOTIFICATIONS")) {
+        // Android 12+ notification & Bluetooth permissions
+        if (permission.equals("android.permission.POST_NOTIFICATIONS") ||
+            permission.equals("android.permission.BLUETOOTH_SCAN") ||
+            permission.equals("android.permission.BLUETOOTH_CONNECT") ||
+            permission.equals("android.permission.BLUETOOTH_ADVERTISE")) {
             return true;
         }
         
@@ -649,7 +635,6 @@ public static class GetPackageInfo extends MethodHook {
             return true;
         }
 
-        
         // Xiaomi-specific permissions
         if (permission.equals("miui.permission.USE_INTERNAL_GENERAL_API") ||
             permission.equals("miui.permission.OPTIMIZE_POWER") ||
