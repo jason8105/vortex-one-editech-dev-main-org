@@ -156,19 +156,15 @@ public class IActivityManagerProxy extends ClassInvocationStub {
                         || auth.equals("media")
                         || auth.equals("telephony")
                         || ((String) auth).contains("com.google.android.gms")
-                        || ((String) auth).contains("app.revanced.android.gms") // <--- ADD THIS LINE
                         || ((String) auth).contains("com.android.vending")
                         || ((String) auth).contains("com.google.android.gsf")
                         || auth.equals("com.google.android.gms.chimera")
-                        || auth.equals("app.revanced.android.gms.chimera")      // <--- ADD THIS LINE
                         || auth.equals("com.huawei.android.launcher.settings")
                         || auth.equals("com.hihonor.android.launcher.settings")) {
                     content = method.invoke(who, args);
                     ContentProviderDelegate.update(content, (String) auth);
                     return content;
                 } else {
-                    // ... existing fallback logic
-
                     // Log.d(TAG, "hook getContentProvider: " + auth);
 
                     ProviderInfo providerInfo = BlackBoxCore.getBPackageManager()
