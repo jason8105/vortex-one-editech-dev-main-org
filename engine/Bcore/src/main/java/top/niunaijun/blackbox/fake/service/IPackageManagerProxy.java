@@ -126,75 +126,38 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-    @ProxyMethod("getPackageInfo")
-    public static class GetPackageInfo extends MethodHook {
+    @ProxyMethod("getNameForUid")
+    public static class GetNameForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String packageName = (String) args[0];
-            int flags = MethodParameterUtils.toInt(args[1]);
-            
-            if ("com.google.android.gms".equals(packageName)) {
-                packageName = "app.revanced.android.gms";
-                args[0] = packageName;
-            }
-            
-            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
-            if (packageInfo != null) {
-                // Force Google-equivalent signature spoofing for GMS so Play Games passes verification
-                if ("app.revanced.android.gms".equals(packageName) || "com.google.android.gms".equals(packageName)) {
-                    try {
-                        // Inject a recognized signature structure to satisfy Play Games cryptographic checks
-                        Signature fakeGoogleSig = new Signature("3082046b30820353a00302010202044a5b4c09300d06092a864886f70d01010b0500307931... (or host signature fallback)");
-                        packageInfo.signatures = new Signature[]{ fakeGoogleSig };
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageInfo.signingInfo != null) {
-                            // If signingInfo exists, align it with the spoofed signature
-                            packageInfo.signingInfo = new SigningInfo(new android.content.pm.Signature[]{ fakeGoogleSig });
-                        }
-                    } catch (Exception e) {
-                        Slog.e(TAG, "GMS signature spoofing injection failed", e);
-                    }
+            int uid = (Integer) args[0];
+            String pkgName = BlackBoxCore.getBPackageManager().getNameForUid(uid);
+            if (pkgName == null) {
+                String activePkg = BActivityThread.getAppPackageName();
+                if (activePkg != null) {
+                    return activePkg;
                 }
-                
-                packageInfo.versionCode = 2100000000;
-                packageInfo.versionName = "99.99.99";
-                if (Build.VERSION.SDK_INT >= 28) {
-                    packageInfo.setLongVersionCode(2100000000L);
-                }
-                return packageInfo;
             }
-            if (AppSystemEnv.isOpenPackage(packageName)) {
-                return method.invoke(who, args);
-            }
-            return null;
+            return pkgName != null ? pkgName : method.invoke(who, args);
         }
     }
 
-        
-        private PackageInfo createFakeGooglePlayServicesPackageInfo() {
-            PackageInfo packageInfo = new PackageInfo();
-            packageInfo.packageName = "com.android.vending";
-            packageInfo.versionName = "33.8.16-21";
-            packageInfo.versionCode = 83381621;
-            
-            ApplicationInfo appInfo = new ApplicationInfo();
-            appInfo.packageName = "com.android.vending";
-            appInfo.name = "Google Play Store";
-            appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
-            appInfo.uid = 10001; 
-            packageInfo.applicationInfo = appInfo;
-            return packageInfo;
-        }
-    }
-
-
-    @ProxyMethod("getPackageUid")
-    public static class GetPackageUid extends MethodHook {
+    @ProxyMethod("getPackagesForUid")
+    public static class GetPackagesForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            MethodParameterUtils.replaceFirstAppPkg(args);
-            return method.invoke(who, args);
+            int uid = (Integer) args[0];
+            String[] packagesForUid = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+            if (packagesForUid == null || packagesForUid.length == 0) {
+                String activePkg = BActivityThread.getAppPackageName();
+                if (activePkg != null) {
+                    return new String[]{activePkg};
+                }
+            }
+            return packagesForUid != null ? packagesForUid : (String[]) method.invoke(who, args);
         }
     }
+
 
     @ProxyMethod("getProviderInfo")
     public static class GetProviderInfo extends MethodHook {

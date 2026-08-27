@@ -85,6 +85,7 @@ import top.niunaijun.blackbox.utils.compat.BuildCompat;
 import top.niunaijun.blackbox.utils.compat.ContextCompat;
 import top.niunaijun.blackbox.utils.compat.StrictModeCompat;
 import top.niunaijun.blackbox.core.system.JarManager;
+import top.niunaijun.blackbox.utils.SpoofUtil;
 
 /**
  * updated by alex5402 on 3/31/21.
@@ -367,6 +368,13 @@ public class BActivityThread extends IBActivityThread.Stub {
     public synchronized void handleBindApplication(String packageName, String processName) {
         if (isInit())
             return;
+
+        // Force-load global signature spoofing for this container process
+        try {
+            SpoofUtil.killPM();
+        } catch (Throwable ignored) {
+        }
+
         try {
             CrashHandler.create();
         } catch (Throwable ignored) {
