@@ -133,26 +133,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
-    @ProxyMethod("getPackageInfo")
-    public static class GetPackageInfo extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            PackageInfo packageInfo = (PackageInfo) method.invoke(who, args);
-            spoofPackageInfo(packageInfo);
-            return packageInfo;
-        }
-    }
-
-    @ProxyMethod("getPackageInfoAsUser")
-    public static class GetPackageInfoAsUser extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            PackageInfo packageInfo = (PackageInfo) method.invoke(who, args);
-            spoofPackageInfo(packageInfo);
-            return packageInfo;
-        }
-    }
-
     @ProxyMethod("resolveIntent")
     public static class ResolveIntent extends MethodHook {
         @Override
@@ -191,23 +171,93 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
+    @ProxyMethod("getPackageInfo")
+    public static class GetPackageInfo extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            String packageName = (String) args[0];
+            int flags = MethodParameterUtils.toInt(args[1]);
+
+            if ("com.android.vending".equals(packageName)) {
+                PackageInfo packageInfo = createFakeGooglePlayServicesPackageInfo();
+                spoofPackageInfo(packageInfo);
+                return packageInfo;
+            }
+
+            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
+            if (packageInfo != null) {
+                spoofPackageInfo(packageInfo);
+
+                if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
+                    for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
+                        String perm = packageInfo.requestedPermissions[i];
+                        if (perm != null && (perm.equals(android.Manifest.permission.RECORD_AUDIO)
+                                || perm.equals("android.permission.FOREGROUND_SERVICE_MICROPHONE")
+                                || perm.equals(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
+                                || perm.equals(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
+                                || perm.equals("android.permission.READ_SAFETY_CENTER_STATUS")
+                                || perm.equals("android.permission.SEND_SAFETY_CENTER_UPDATE"))) {
+                            packageInfo.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
+                        }
+                    }
+                }
+
+                packageInfo.versionCode = 2100000000;
+                packageInfo.versionName = "99.99.99";
+                if (Build.VERSION.SDK_INT >= 28) {
+                    packageInfo.setLongVersionCode(2100000000L);
+                }
+                return packageInfo;
+            }
+            if (AppSystemEnv.isOpenPackage(packageName)) {
+                return method.invoke(who, args);
+            }
+            return null;
+        }
+
+        private PackageInfo createFakeGooglePlayServicesPackageInfo() {
+            PackageInfo packageInfo = new PackageInfo();
+            packageInfo.packageName = "com.android.vending";
+            packageInfo.versionName = "33.8.16-21";
+            packageInfo.versionCode = 83381621;
+
+            ApplicationInfo appInfo = new ApplicationInfo();
+            appInfo.packageName = "com.android.vending";
+            appInfo.name = "Google Play Store";
+            appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
+            appInfo.uid = 10001;
+            packageInfo.applicationInfo = appInfo;
+
+            return packageInfo;
+        }
+    }
+
+    @ProxyMethod("getPackageUid")
+    public static class GetPackageUid extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            MethodParameterUtils.replaceFirstAppPkg(args);
+            return method.invoke(who, args);
+        }
+    }
+
     @ProxyMethod("getNameForUid")
     public static class GetNameForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                int uid = (Integer) args[0];
-                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
-                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
-                    return currentPkg;
-                }
-                try {
-                    String pkgName = BlackBoxCore.getContext().getPackageManager().getNameForUid(uid);
-                    if (pkgName != null) {
-                        return pkgName;
+            try {
+                if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                    int uid = (Integer) args[0];
+                    String activePkg = BActivityThread.getAppPackageName();
+                    if (activePkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid() || uid == BlackBoxCore.getHostUid())) {
+                        return activePkg;
                     }
-                } catch (Exception ignored) {}
-            }
+                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+                    if (pkgs != null && pkgs.length > 0) {
+                        return pkgs[0];
+                    }
+                }
+            } catch (Exception ignored) {}
             return method.invoke(who, args);
         }
     }
@@ -216,23 +266,42 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class GetPackagesForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                int uid = (Integer) args[0];
-                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
-                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
-                    return new String[]{currentPkg};
-                }
-                try {
-                    String[] packagesForUid = BlackBoxCore.getContext().getPackageManager().getPackagesForUid(uid);
-                    if (packagesForUid != null && packagesForUid.length > 0) {
-                        return packagesForUid;
+            try {
+                if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                    int uid = (Integer) args[0];
+                    if (uid == BlackBoxCore.getHostUid()) {
+                        uid = BActivityThread.getBUid();
                     }
-                } catch (Exception ignored) {}
-            }
+
+                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+
+                    // Forcefully include Google Play Games and GMS for container UID requests
+                    if (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
+                        List<String> pkgList = new ArrayList<>();
+                        if (pkgs != null) {
+                            pkgList.addAll(Arrays.asList(pkgs));
+                        }
+
+                        String activePkg = BActivityThread.getAppPackageName();
+                        if (activePkg != null && !pkgList.contains(activePkg)) {
+                            pkgList.add(activePkg);
+                        }
+
+                        if (!pkgList.contains("com.google.android.play.games")) pkgList.add("com.google.android.play.games");
+                        if (!pkgList.contains("com.google.android.gms")) pkgList.add("com.google.android.gms");
+                        if (!pkgList.contains("com.android.vending")) pkgList.add("com.android.vending");
+
+                        return pkgList.toArray(new String[0]);
+                    }
+
+                    if (pkgs != null && pkgs.length > 0) {
+                        return pkgs;
+                    }
+                }
+            } catch (Exception ignored) {}
             return method.invoke(who, args);
         }
     }
-
 
     @ProxyMethod("getProviderInfo")
     public static class GetProviderInfo extends MethodHook {
@@ -354,8 +423,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String type = MethodParameterUtils.getFirstParam(args, String.class);
             Integer flags = MethodParameterUtils.getFirstParam(args, Integer.class);
             List<ResolveInfo> resolves = BlackBoxCore.getBPackageManager().queryBroadcastReceivers(intent, flags, type, BActivityThread.getUserId());
-            Slog.d(TAG, "queryIntentReceivers: " + resolves);
-
             if (BuildCompat.isN()) {
                 return ParceledListSliceCompat.create(resolves);
             }
@@ -423,8 +490,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     public static class SimpleAudioPermissionHook extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            String permission = (String) args[0];
-            String packageName = (String) args[1];
             return PackageManager.PERMISSION_GRANTED;
         }
     }
