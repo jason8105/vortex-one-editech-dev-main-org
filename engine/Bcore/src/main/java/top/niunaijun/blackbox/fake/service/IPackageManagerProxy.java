@@ -105,6 +105,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         addMethodHook(new ValueMethodProxy("addOnPermissionsChangeListener", 0));
         addMethodHook(new ValueMethodProxy("removeOnPermissionsChangeListener", 0));
         addMethodHook(new SimpleAudioPermissionHook());
+        addMethodHook(new CheckUidPermission()); // Fixes the SafetyCenter crash
         addMethodHook(new CheckSelfPermission());
         addMethodHook(new ShouldShowRequestPermissionRationale());
         addMethodHook(new RequestPermissions());
@@ -127,7 +128,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                         }
                     }
                 } catch (Exception e) {
-                    Slog.e(TAG, "Failed to spoof signature for package: " + packageInfo.packageName, e);
+                    Slog.e(TAG, "Failed to spoof signature", e);
                 }
             }
         }
@@ -141,9 +142,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String resolvedType = (String) args[1];
             int flags = MethodParameterUtils.toInt(args[2]);
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveIntent(intent, resolvedType, flags, BlackBoxCore.getUserId());
-            if (resolveInfo != null) {
-                return resolveInfo;
-            }
+            if (resolveInfo != null) return resolveInfo;
             return method.invoke(who, args);
         }
     }
@@ -156,9 +155,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String resolvedType = (String) args[1];
             int flags = MethodParameterUtils.toInt(args[2]);
             ResolveInfo resolveInfo = BlackBoxCore.getBPackageManager().resolveService(intent, flags, resolvedType, BlackBoxCore.getUserId());
-            if (resolveInfo != null) {
-                return resolveInfo;
-            }
+            if (resolveInfo != null) return resolveInfo;
             return method.invoke(who, args);
         }
     }
@@ -187,31 +184,12 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {
                 spoofPackageInfo(packageInfo);
-
-                if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
-                    for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
-                        String perm = packageInfo.requestedPermissions[i];
-                        if (perm != null && (perm.equals(android.Manifest.permission.RECORD_AUDIO)
-                                || perm.equals("android.permission.FOREGROUND_SERVICE_MICROPHONE")
-                                || perm.equals(android.Manifest.permission.MODIFY_AUDIO_SETTINGS)
-                                || perm.equals(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
-                                || perm.equals("android.permission.READ_SAFETY_CENTER_STATUS")
-                                || perm.equals("android.permission.SEND_SAFETY_CENTER_UPDATE"))) {
-                            packageInfo.requestedPermissionsFlags[i] |= PackageInfo.REQUESTED_PERMISSION_GRANTED;
-                        }
-                    }
-                }
-
                 packageInfo.versionCode = 2100000000;
                 packageInfo.versionName = "99.99.99";
-                if (Build.VERSION.SDK_INT >= 28) {
-                    packageInfo.setLongVersionCode(2100000000L);
-                }
+                if (Build.VERSION.SDK_INT >= 28) packageInfo.setLongVersionCode(2100000000L);
                 return packageInfo;
             }
-            if (AppSystemEnv.isOpenPackage(packageName)) {
-                return method.invoke(who, args);
-            }
+            if (AppSystemEnv.isOpenPackage(packageName)) return method.invoke(who, args);
             return null;
         }
 
@@ -227,7 +205,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
             appInfo.uid = 10001;
             packageInfo.applicationInfo = appInfo;
-
             return packageInfo;
         }
     }
@@ -241,6 +218,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
+    // --- EXACT FIX FOR THE PLAY GAMES UID MISMATCH ---
     @ProxyMethod("getNameForUid")
     public static class GetNameForUid extends MethodHook {
         @Override
@@ -248,13 +226,9 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             try {
                 if (args != null && args.length > 0 && args[0] instanceof Integer) {
                     int uid = (Integer) args[0];
-                    String activePkg = BActivityThread.getAppPackageName();
-                    if (activePkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid() || uid == BlackBoxCore.getHostUid())) {
-                        return activePkg;
-                    }
-                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
-                    if (pkgs != null && pkgs.length > 0) {
-                        return pkgs[0];
+                    if (uid == BlackBoxCore.getHostUid() || uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
+                        String activePkg = BActivityThread.getAppPackageName();
+                        return activePkg != null ? activePkg : "com.google.android.gms";
                     }
                 }
             } catch (Exception ignored) {}
@@ -269,33 +243,24 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             try {
                 if (args != null && args.length > 0 && args[0] instanceof Integer) {
                     int uid = (Integer) args[0];
-                    if (uid == BlackBoxCore.getHostUid()) {
-                        uid = BActivityThread.getBUid();
-                    }
-
-                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
-
-                    // Forcefully include Google Play Games and GMS for container UID requests
-                    if (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
+                    
+                    if (uid == BlackBoxCore.getHostUid() || uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
                         List<String> pkgList = new ArrayList<>();
-                        if (pkgs != null) {
-                            pkgList.addAll(Arrays.asList(pkgs));
-                        }
+                        
+                        String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(BActivityThread.getBUid());
+                        if (pkgs != null) pkgList.addAll(Arrays.asList(pkgs));
 
                         String activePkg = BActivityThread.getAppPackageName();
-                        if (activePkg != null && !pkgList.contains(activePkg)) {
-                            pkgList.add(activePkg);
-                        }
+                        if (activePkg != null && !pkgList.contains(activePkg)) pkgList.add(activePkg);
 
+                        // The logic that forces Play Games verification to pass!
                         if (!pkgList.contains("com.google.android.play.games")) pkgList.add("com.google.android.play.games");
                         if (!pkgList.contains("com.google.android.gms")) pkgList.add("com.google.android.gms");
                         if (!pkgList.contains("com.android.vending")) pkgList.add("com.android.vending");
+                        if (!pkgList.contains("com.google.android.gsf")) pkgList.add("com.google.android.gsf");
+                        if (!pkgList.contains(BlackBoxCore.getHostPkg())) pkgList.add(BlackBoxCore.getHostPkg());
 
                         return pkgList.toArray(new String[0]);
-                    }
-
-                    if (pkgs != null && pkgs.length > 0) {
-                        return pkgs;
                     }
                 }
             } catch (Exception ignored) {}
@@ -310,11 +275,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ComponentName componentName = (ComponentName) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ProviderInfo providerInfo = BlackBoxCore.getBPackageManager().getProviderInfo(componentName, flags, BlackBoxCore.getUserId());
-            if (providerInfo != null)
-                return providerInfo;
-            if (AppSystemEnv.isOpenPackage(componentName)) {
-                return method.invoke(who, args);
-            }
+            if (providerInfo != null) return providerInfo;
+            if (AppSystemEnv.isOpenPackage(componentName)) return method.invoke(who, args);
             return null;
         }
     }
@@ -326,11 +288,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ComponentName componentName = (ComponentName) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ActivityInfo receiverInfo = BlackBoxCore.getBPackageManager().getReceiverInfo(componentName, flags, BlackBoxCore.getUserId());
-            if (receiverInfo != null)
-                return receiverInfo;
-            if (AppSystemEnv.isOpenPackage(componentName)) {
-                return method.invoke(who, args);
-            }
+            if (receiverInfo != null) return receiverInfo;
+            if (AppSystemEnv.isOpenPackage(componentName)) return method.invoke(who, args);
             return null;
         }
     }
@@ -342,11 +301,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ComponentName componentName = (ComponentName) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ActivityInfo activityInfo = BlackBoxCore.getBPackageManager().getActivityInfo(componentName, flags, BlackBoxCore.getUserId());
-            if (activityInfo != null)
-                return activityInfo;
-            if (AppSystemEnv.isOpenPackage(componentName)) {
-                return method.invoke(who, args);
-            }
+            if (activityInfo != null) return activityInfo;
+            if (AppSystemEnv.isOpenPackage(componentName)) return method.invoke(who, args);
             return null;
         }
     }
@@ -358,11 +314,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ComponentName componentName = (ComponentName) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ServiceInfo serviceInfo = BlackBoxCore.getBPackageManager().getServiceInfo(componentName, flags, BlackBoxCore.getUserId());
-            if (serviceInfo != null)
-                return serviceInfo;
-            if (AppSystemEnv.isOpenPackage(componentName)) {
-                return method.invoke(who, args);
-            }
+            if (serviceInfo != null) return serviceInfo;
+            if (AppSystemEnv.isOpenPackage(componentName)) return method.invoke(who, args);
             return null;
         }
     }
@@ -394,12 +347,8 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String packageName = (String) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName, flags, BlackBoxCore.getUserId());
-            if (applicationInfo != null) {
-                return applicationInfo;
-            }
-            if (AppSystemEnv.isOpenPackage(packageName)) {
-                return method.invoke(who, args);
-            }
+            if (applicationInfo != null) return applicationInfo;
+            if (AppSystemEnv.isOpenPackage(packageName)) return method.invoke(who, args);
             return null;
         }
     }
@@ -423,9 +372,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String type = MethodParameterUtils.getFirstParam(args, String.class);
             Integer flags = MethodParameterUtils.getFirstParam(args, Integer.class);
             List<ResolveInfo> resolves = BlackBoxCore.getBPackageManager().queryBroadcastReceivers(intent, flags, type, BActivityThread.getUserId());
-            if (BuildCompat.isN()) {
-                return ParceledListSliceCompat.create(resolves);
-            }
+            if (BuildCompat.isN()) return ParceledListSliceCompat.create(resolves);
             return resolves;
         }
     }
@@ -437,9 +384,7 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             String authority = (String) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
             ProviderInfo providerInfo = BlackBoxCore.getBPackageManager().resolveContentProvider(authority, flags, BActivityThread.getUserId());
-            if (providerInfo == null) {
-                return method.invoke(who, args);
-            }
+            if (providerInfo == null) return method.invoke(who, args);
             return providerInfo;
         }
     }
@@ -476,18 +421,22 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             ComponentName componentName = (ComponentName) args[0];
             String packageName = componentName.getPackageName();
             ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName, 0, BActivityThread.getUserId());
-            if (applicationInfo != null) {
-                return PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
-            }
-            if (AppSystemEnv.isOpenPackage(componentName)) {
-                return method.invoke(who, args);
-            }
+            if (applicationInfo != null) return PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+            if (AppSystemEnv.isOpenPackage(componentName)) return method.invoke(who, args);
             throw new IllegalArgumentException();
         }
     }
 
     @ProxyMethod("checkPermission")
     public static class SimpleAudioPermissionHook extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            return PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
+    @ProxyMethod("checkUidPermission")
+    public static class CheckUidPermission extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             return PackageManager.PERMISSION_GRANTED;

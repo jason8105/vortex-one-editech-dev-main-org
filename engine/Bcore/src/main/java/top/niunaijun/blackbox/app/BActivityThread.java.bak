@@ -368,6 +368,13 @@ public class BActivityThread extends IBActivityThread.Stub {
     public synchronized void handleBindApplication(String packageName, String processName) {
         if (isInit())
             return;
+
+        // Force-load global signature spoofing for this container process
+        try {
+            SpoofUtil.killPM();
+        } catch (Throwable ignored) {
+        }
+
         try {
             CrashHandler.create();
         } catch (Throwable ignored) {

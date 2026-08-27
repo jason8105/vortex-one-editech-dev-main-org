@@ -9,8 +9,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.content.pm.Signature;
 import android.os.Build;
-import android.util.Log;
+import android.util.Base64;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -35,6 +36,35 @@ import top.niunaijun.blackbox.utils.compat.ParceledListSliceCompat;
 
 public class IPackageManagerProxy extends BinderInvocationStub {
     public static final String TAG = "PackageManagerStub";
+
+    private static final List<String> KNOWN_GOOGLE_PACKAGES = Arrays.asList(
+            "com.google.android.gms",
+            "com.android.vending",
+            "com.google.android.gsf",
+            "com.google.android.play.games"
+    );
+
+    private static final String FAKE_GOOGLE_SIGNATURE =
+            "MIIEQzCCAyugAwIBAgIJAMLgh0ZkSjCNMA0GCSqGSIb3DQEBBAUAMHQxCzAJBgNVBAYTAlVTMRMw\n" +
+            "EQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29n\n" +
+            "bGUgSW5jLjEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDAeFw0wODA4MjEyMzEz\n" +
+            "MzRaFw0zNjAxMDcyMzEzMzRaMHQxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYw\n" +
+            "FAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29nbGUgSW5jLjEQMA4GA1UECxMHQW5k\n" +
+            "cm9pZDEQMA4GA1UEAxMHQW5kcm9pZDCCASAwDQYJKoZIhvcNAQEBBQADggENADCCAQgCggEBAKtW\n" +
+            "LgDYO6IIrgqWbxJOKdoR8qtW0I9Y4sypEwPpt1TTcvZApxsdyxMJZ2JORland2qSGT2y5b+3JKke\n" +
+            "dxiLDmpHpDsz2WCbdxgxRczfey5YZnTJ4VZbH0xqWVW/8lGmPav5xVwnIiJS6HXk+BVKZF+JcWjA\n" +
+            "sb/GEuq/eFdpuzSqeYTcfi6idkyugwfYwXFU1+5fZKUaRKYCwkkFQVfcAs1fXA5V+++FGfvjJ/Cx\n" +
+            "URaSxaBvGdGDhfXE28LWuT9ozCl5xw4Yq5OGazvV24mZVSoOO0yZ31j7kYvtwYK6NeADwbSxDdJE\n" +
+            "qO4k//0zOHKrUiGYXtqw/A0LFFtqoZKFjnkCAQOjgdkwgdYwHQYDVR0OBBYEFMd9jMIhF1Ylmn/T\n" +
+            "gt9r45jk14alMIGmBgNVHSMEgZ4wgZuAFMd9jMIhF1Ylmn/Tgt9r45jk14aloXikdjB0MQswCQYD\n" +
+            "VQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEUMBIG\n" +
+            "A1UEChMLR29vZ2xlIEluYy4xEDAOBgNVBAsTB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWSCCQDC\n" +
+            "4IdGZEowjTAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBBAUAA4IBAQBt0lLO74UwLDYKqs6Tm8/y\n" +
+            "zKkEu116FmH4rkaymUIE0P9KaMftGlMexFlaYjzmB2OxZyl6euNXEsQH8gjwyxCUKRJNexBiGcCE\n" +
+            "yj6z+a1fuHHvkiaai+KL8W1EyNmgjmyy8AW7P+LLlkR+ho5zEHatRbM/YAnqGcFh5iZBqpknHf1S\n" +
+            "KMXFh4dd239FJ1jWYfbMDMy3NS5CTMQ2XFI1MvcyUTdZPErjQfTbQe3aDQsQcafEQPD+nqActifK\n" +
+            "Z0Np0IS9L9kR/wbNvyz6ENwPiTrjV2KRkEjH78ZMcUQXg0L3BYHJ3lc69Vs5Ddf9uUGGMYldX3Wf\n" +
+            "MBEmh/9iFBDAaTCK\n";
 
     public IPackageManagerProxy() {
         super(BRActivityThread.get().sPackageManager().asBinder());
@@ -83,6 +113,26 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         addMethodHook(new XiaomiSecurityBypass());
     }
 
+    private static void spoofPackageInfo(PackageInfo packageInfo) {
+        if (packageInfo != null && packageInfo.packageName != null) {
+            if (KNOWN_GOOGLE_PACKAGES.contains(packageInfo.packageName.toLowerCase())) {
+                try {
+                    byte[] sigBytes = Base64.decode(FAKE_GOOGLE_SIGNATURE, Base64.DEFAULT);
+                    Signature signature = new Signature(sigBytes);
+                    packageInfo.signatures = new Signature[]{signature};
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageInfo.signingInfo != null) {
+                        Signature[] signers = packageInfo.signingInfo.getApkContentsSigners();
+                        if (signers != null && signers.length > 0) {
+                            signers[0] = signature;
+                        }
+                    }
+                } catch (Exception e) {
+                    Slog.e(TAG, "Failed to spoof signature for package: " + packageInfo.packageName, e);
+                }
+            }
+        }
+    }
+
     @ProxyMethod("resolveIntent")
     public static class ResolveIntent extends MethodHook {
         @Override
@@ -127,55 +177,16 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
-            
-            // Handle fake Google Play Store / Services / Play Games info
-            if ("com.android.vending".equals(packageName) || "com.google.android.gms".equals(packageName) || "com.google.android.play.games".equals(packageName)) {
-                PackageInfo packageInfo = null;
-                if ("com.android.vending".equals(packageName)) {
-                    packageInfo = createFakeGooglePlayServicesPackageInfo();
-                } else {
-                    packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
-                }
 
-                if (packageInfo != null) {
-                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-                        try {
-                            PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
-                                    .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
-                            packageInfo.signatures = realInfo.signatures;
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                packageInfo.signingInfo = realInfo.signingInfo;
-                            }
-                        } catch (Exception e) {
-                            Slog.e(TAG, "Signature spoofing failed", e);
-                        }
-                    }
-
-                    packageInfo.versionCode = 2100000000;
-                    packageInfo.versionName = "99.99.99";
-                    if (Build.VERSION.SDK_INT >= 28) {
-                        packageInfo.setLongVersionCode(2100000000L);
-                    }
-                    return packageInfo;
-                }
+            if ("com.android.vending".equals(packageName)) {
+                PackageInfo packageInfo = createFakeGooglePlayServicesPackageInfo();
+                spoofPackageInfo(packageInfo);
+                return packageInfo;
             }
-            
+
             PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
             if (packageInfo != null) {
-                if ("com.google.android.gms".equals(packageName) || "com.google.android.gsf".equals(packageName) || "com.google.android.play.games".equals(packageName) || "com.android.vending".equals(packageName)) {
-                    if ((flags & PackageManager.GET_SIGNATURES) != 0 || (flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-                        try {
-                            PackageInfo realInfo = BlackBoxCore.getContext().getPackageManager()
-                                    .getPackageInfo(BlackBoxCore.getContext().getPackageName(), PackageManager.GET_SIGNATURES | PackageManager.GET_SIGNING_CERTIFICATES);
-                            packageInfo.signatures = realInfo.signatures;
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                packageInfo.signingInfo = realInfo.signingInfo;
-                            }
-                        } catch (Exception e) {
-                            Slog.e(TAG, "Signature spoofing failed", e);
-                        }
-                    }
-                }
+                spoofPackageInfo(packageInfo);
 
                 if (packageInfo.requestedPermissions != null && packageInfo.requestedPermissionsFlags != null) {
                     for (int i = 0; i < packageInfo.requestedPermissions.length; i++) {
@@ -196,7 +207,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                 if (Build.VERSION.SDK_INT >= 28) {
                     packageInfo.setLongVersionCode(2100000000L);
                 }
-
                 return packageInfo;
             }
             if (AppSystemEnv.isOpenPackage(packageName)) {
@@ -204,20 +214,20 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             }
             return null;
         }
-        
+
         private PackageInfo createFakeGooglePlayServicesPackageInfo() {
             PackageInfo packageInfo = new PackageInfo();
             packageInfo.packageName = "com.android.vending";
             packageInfo.versionName = "33.8.16-21";
             packageInfo.versionCode = 83381621;
-            
+
             ApplicationInfo appInfo = new ApplicationInfo();
             appInfo.packageName = "com.android.vending";
             appInfo.name = "Google Play Store";
             appInfo.flags = ApplicationInfo.FLAG_SYSTEM;
-            appInfo.uid = 10001; 
+            appInfo.uid = 10001;
             packageInfo.applicationInfo = appInfo;
-            
+
             return packageInfo;
         }
     }
@@ -227,6 +237,68 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
+            return method.invoke(who, args);
+        }
+    }
+
+    @ProxyMethod("getNameForUid")
+    public static class GetNameForUid extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            try {
+                if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                    int uid = (Integer) args[0];
+                    String activePkg = BActivityThread.getAppPackageName();
+                    if (activePkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid() || uid == BlackBoxCore.getHostUid())) {
+                        return activePkg;
+                    }
+                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+                    if (pkgs != null && pkgs.length > 0) {
+                        return pkgs[0];
+                    }
+                }
+            } catch (Exception ignored) {}
+            return method.invoke(who, args);
+        }
+    }
+
+    @ProxyMethod("getPackagesForUid")
+    public static class GetPackagesForUid extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            try {
+                if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                    int uid = (Integer) args[0];
+                    if (uid == BlackBoxCore.getHostUid()) {
+                        uid = BActivityThread.getBUid();
+                    }
+
+                    String[] pkgs = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
+
+                    // Forcefully include Google Play Games and GMS for container UID requests
+                    if (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid()) {
+                        List<String> pkgList = new ArrayList<>();
+                        if (pkgs != null) {
+                            pkgList.addAll(Arrays.asList(pkgs));
+                        }
+
+                        String activePkg = BActivityThread.getAppPackageName();
+                        if (activePkg != null && !pkgList.contains(activePkg)) {
+                            pkgList.add(activePkg);
+                        }
+
+                        if (!pkgList.contains("com.google.android.play.games")) pkgList.add("com.google.android.play.games");
+                        if (!pkgList.contains("com.google.android.gms")) pkgList.add("com.google.android.gms");
+                        if (!pkgList.contains("com.android.vending")) pkgList.add("com.android.vending");
+
+                        return pkgList.toArray(new String[0]);
+                    }
+
+                    if (pkgs != null && pkgs.length > 0) {
+                        return pkgs;
+                    }
+                }
+            } catch (Exception ignored) {}
             return method.invoke(who, args);
         }
     }
@@ -377,43 +449,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             MethodParameterUtils.replaceFirstAppPkg(args);
-            return method.invoke(who, args);
-        }
-    }
-
-    @ProxyMethod("getNameForUid")
-    public static class GetNameForUid extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            try {
-                if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                    int uid = (Integer) args[0];
-                    String activePkg = BActivityThread.getAppPackageName();
-                    if (activePkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid() || uid == BlackBoxCore.getHostUid())) {
-                        return activePkg;
-                    }
-                }
-            } catch (Exception ignored) {}
-            return method.invoke(who, args);
-        }
-    }
-
-    @ProxyMethod("getPackagesForUid")
-    public static class GetPackagesForUid extends MethodHook {
-        @Override
-        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            try {
-                if (args != null && args.length > 0 && args[0] instanceof Integer) {
-                    int uid = (Integer) args[0];
-                    if (uid == BlackBoxCore.getHostUid()) {
-                        args[0] = BActivityThread.getBUid();
-                    }
-                    String activePkg = BActivityThread.getAppPackageName();
-                    if (activePkg != null) {
-                        return new String[]{activePkg};
-                    }
-                }
-            } catch (Exception ignored) {}
             return method.invoke(who, args);
         }
     }
