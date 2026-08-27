@@ -179,14 +179,15 @@ public class BActivityThread extends IBActivityThread.Stub {
         return getAppConfig() == null ? 0 : getAppConfig().userId;
     }
 
-    public void initProcess(AppConfig appConfig) {
-        // MUST run instantly on process spawn to prevent WebView lock collisions
+     public void initProcess(AppConfig appConfig) {
+        // MUST run instantly on process spawn to prevent WebView lock collisions in GMS background processes
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 android.webkit.WebView.setDataDirectorySuffix("virt_" + android.os.Process.myPid());
             } catch (Exception ignored) {}
         }
         synchronized (mConfigLock) {
+
 
             if (this.mAppConfig != null && !this.mAppConfig.packageName.equals(appConfig.packageName)) {
                 // 该进程已被attach

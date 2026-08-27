@@ -76,6 +76,8 @@
     <!-- google services framework start -->
     <uses-permission android:name="com.google.android.providers.talk.permission.READ_ONLY" />
     <uses-permission android:name="com.google.android.providers.talk.permission.WRITE_ONLY" />
+    <uses-permission android:name="android.permission.READ_SAFETY_CENTER_STATUS" />
+    <uses-permission android:name="android.permission.SEND_SAFETY_CENTER_UPDATE" />
 
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
