@@ -394,18 +394,34 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         }
     }
 
+    @ProxyMethod("getNameForUid")
+    public static class GetNameForUid extends MethodHook {
+        @Override
+        protected Object hook(Object who, Method method, Object[] args) throws Throwable {
+            if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                int uid = (Integer) args[0];
+                // If it's a virtual UID belonging to our container process, return the correct active package name
+                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
+                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
+                    return currentPkg;
+                }
+            }
+            return method.invoke(who, args);
+        }
+    }
+
     @ProxyMethod("getPackagesForUid")
     public static class GetPackagesForUid extends MethodHook {
         @Override
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
-            int uid = (Integer) args[0];
-            if (uid == BlackBoxCore.getHostUid()) {
-                args[0] = BActivityThread.getBUid();
-                uid = (int) args[0];
+            if (args != null && args.length > 0 && args[0] instanceof Integer) {
+                int uid = (Integer) args[0];
+                String currentPkg = top.niunaijun.blackbox.app.BActivityThread.getAppPackageName();
+                if (currentPkg != null && (uid == BlackBoxCore.getBUid() || uid == android.os.Process.myUid())) {
+                    return new String[]{currentPkg};
+                }
             }
-            String[] packagesForUid = BlackBoxCore.getBPackageManager().getPackagesForUid(uid);
-            Slog.d(TAG, args[0] + " , " + BActivityThread.getAppProcessName() + " GetPackagesForUid: " + Arrays.toString(packagesForUid));
-            return packagesForUid;
+            return method.invoke(who, args);
         }
     }
 

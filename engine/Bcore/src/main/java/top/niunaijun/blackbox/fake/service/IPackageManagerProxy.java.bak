@@ -621,8 +621,11 @@ public class IPackageManagerProxy extends BinderInvocationStub {
     private static boolean isNotificationOrXiaomiPermission(String permission) {
         if (permission == null) return false;
         
-        // Android 12+ notification permission
-        if (permission.equals("android.permission.POST_NOTIFICATIONS")) {
+        // Android 12+ notification & Bluetooth permissions
+        if (permission.equals("android.permission.POST_NOTIFICATIONS") ||
+            permission.equals("android.permission.BLUETOOTH_SCAN") ||
+            permission.equals("android.permission.BLUETOOTH_CONNECT") ||
+            permission.equals("android.permission.BLUETOOTH_ADVERTISE")) {
             return true;
         }
         
@@ -632,7 +635,6 @@ public class IPackageManagerProxy extends BinderInvocationStub {
             return true;
         }
 
-        
         // Xiaomi-specific permissions
         if (permission.equals("miui.permission.USE_INTERNAL_GENERAL_API") ||
             permission.equals("miui.permission.OPTIMIZE_POWER") ||
