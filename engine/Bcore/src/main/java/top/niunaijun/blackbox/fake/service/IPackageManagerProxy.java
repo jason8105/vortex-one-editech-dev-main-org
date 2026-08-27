@@ -181,8 +181,24 @@ public class IPackageManagerProxy extends BinderInvocationStub {
                 return packageInfo;
             }
 
-            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(packageName, flags, BlackBoxCore.getUserId());
+            // Redirect com.google.android.gms queries to ReVanced MicroG
+            String queryPkg = packageName;
+            if ("com.google.android.gms".equals(packageName)) {
+                PackageInfo revancedInfo = BlackBoxCore.getBPackageManager().getPackageInfo("app.revanced.android.gms", flags, BlackBoxCore.getUserId());
+                if (revancedInfo != null) queryPkg = "app.revanced.android.gms";
+            }
+
+            PackageInfo packageInfo = BlackBoxCore.getBPackageManager().getPackageInfo(queryPkg, flags, BlackBoxCore.getUserId());
+            
+            // Fallback: If GMS is entirely missing, fake it so games don't throw the missing popup
+            if (packageInfo == null && "com.google.android.gms".equals(packageName)) {
+                packageInfo = createFakeGooglePlayServicesPackageInfo();
+                packageInfo.packageName = "com.google.android.gms";
+                if (packageInfo.applicationInfo != null) packageInfo.applicationInfo.packageName = "com.google.android.gms";
+            }
+
             if (packageInfo != null) {
+                packageInfo.packageName = packageName; // Restore the requested name
                 spoofPackageInfo(packageInfo);
                 packageInfo.versionCode = 2100000000;
                 packageInfo.versionName = "99.99.99";
@@ -346,9 +362,22 @@ public class IPackageManagerProxy extends BinderInvocationStub {
         protected Object hook(Object who, Method method, Object[] args) throws Throwable {
             String packageName = (String) args[0];
             int flags = MethodParameterUtils.toInt(args[1]);
-            ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(packageName, flags, BlackBoxCore.getUserId());
-            if (applicationInfo != null) return applicationInfo;
-            if (AppSystemEnv.isOpenPackage(packageName)) return method.invoke(who, args);
+            
+            // Redirect com.google.android.gms queries to ReVanced MicroG
+            String queryPkg = packageName;
+            if ("com.google.android.gms".equals(packageName)) {
+                ApplicationInfo revancedInfo = BlackBoxCore.getBPackageManager().getApplicationInfo("app.revanced.android.gms", flags, BlackBoxCore.getUserId());
+                if (revancedInfo != null) queryPkg = "app.revanced.android.gms";
+            }
+
+            ApplicationInfo applicationInfo = BlackBoxCore.getBPackageManager().getApplicationInfo(queryPkg, flags, BlackBoxCore.getUserId());
+            if (applicationInfo != null) {
+                applicationInfo.packageName = packageName; // Restore the requested name
+                return applicationInfo;
+            }
+            if (AppSystemEnv.isOpenPackage(packageName)) {
+                return method.invoke(who, args);
+            }
             return null;
         }
     }

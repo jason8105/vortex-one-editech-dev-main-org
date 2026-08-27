@@ -180,7 +180,14 @@ public class BActivityThread extends IBActivityThread.Stub {
     }
 
     public void initProcess(AppConfig appConfig) {
+        // MUST run instantly on process spawn to prevent WebView lock collisions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                android.webkit.WebView.setDataDirectorySuffix("virt_" + android.os.Process.myPid());
+            } catch (Exception ignored) {}
+        }
         synchronized (mConfigLock) {
+
             if (this.mAppConfig != null && !this.mAppConfig.packageName.equals(appConfig.packageName)) {
                 // 该进程已被attach
                 throw new RuntimeException("reject init process: " + appConfig.processName + ", this process is : " + this.mAppConfig.processName);
