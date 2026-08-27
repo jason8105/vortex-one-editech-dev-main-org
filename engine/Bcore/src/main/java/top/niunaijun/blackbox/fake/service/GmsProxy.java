@@ -88,8 +88,6 @@ public class GmsProxy extends BinderInvocationStub {
             }
         }
     }
-}
-
 
     // Hook getServiceBroker to handle service broker issues
     @ProxyMethod("getServiceBroker")
